@@ -14,7 +14,9 @@ import {
   RotateCw,
   Clock,
   Gauge,
+  ChevronRight,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 interface PontoCardProps {
   estado: PontoEstadoPrevisao
@@ -22,6 +24,7 @@ interface PontoCardProps {
 }
 
 export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
+  const navigate = useNavigate()
   const { ponto, loading, error, currentHourData, statusSemaforo } = estado
   const nomeExibicao = formatPontoNome(ponto.nome)
   const tipoFormatado = formatTipoPonto(ponto.tipo)
@@ -190,14 +193,22 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
   // Rotacionando windDirDeg graus com ponta para onde sopra:
   const arrowRotation = windDirDeg
 
+  const handleClickCard = () => {
+    navigate(`/ponto/${ponto.id || ponto.nome.toLowerCase()}`)
+  }
+
   return (
-    <Card className="bg-[#11161d] border-zinc-800/90 shadow-lg text-zinc-100 overflow-hidden hover:border-zinc-700/80 transition-all">
+    <Card
+      onClick={handleClickCard}
+      className="bg-[#11161d] border-zinc-800/90 shadow-lg text-zinc-100 overflow-hidden hover:border-cyan-700/70 hover:shadow-cyan-950/20 hover:scale-[1.01] transition-all cursor-pointer group"
+    >
       {/* Header com Nome, Tipo e Semáforo */}
       <CardHeader className="pb-3 border-b border-zinc-800/70 bg-[#0d1218]/60">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <CardTitle className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            <CardTitle className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2 group-hover:text-cyan-300 transition-colors">
               {nomeExibicao}
+              <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge

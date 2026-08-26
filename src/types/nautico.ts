@@ -32,6 +32,16 @@ export interface PrevisaoHoraItem {
   sea_level_height_msl: number | null
 }
 
+export interface ResumoDiaItem {
+  dataIso: string // YYYY-MM-DD
+  nomeDia: string // Hoje, Seg, Ter, Qua, Qui, Sex, Sáb
+  dataExibicao: string // DD/MM
+  isHoje: boolean
+  ventoMax: number | null
+  ondaMax: number | null
+  chuvaTotal: number
+}
+
 export interface PrevisaoPayload {
   ponto_id: string
   ponto_nome: string

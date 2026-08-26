@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import { Ponto, PrevisaoPayload, PrevisaoHoraItem } from '@/types/nautico'
+import { Ponto, PrevisaoPayload, PrevisaoHoraItem, ResumoDiaItem } from '@/types/nautico'
 
 export async function fetchPontos(): Promise<Ponto[]> {
   try {
@@ -123,16 +123,162 @@ export function getWindDirectionLabel(degrees: number | null | undefined): strin
 }
 
 /**
+ * Lista dos 4 pontos canônicos de navegação
+ */
+export const PONTOS_DISPONIVEIS: Array<{
+  slug: string
+  nomeCurto: string
+  nomeCompleto: string
+  tipo: 'abrigado' | 'semi' | 'aberto'
+}> = [
+  {
+    slug: 'angra',
+    nomeCurto: 'Angra dos Reis',
+    nomeCompleto: 'Angra dos Reis',
+    tipo: 'abrigado',
+  },
+  {
+    slug: 'abraao',
+    nomeCurto: 'Abraão',
+    nomeCompleto: 'Vila do Abraão (Ilha Grande)',
+    tipo: 'semi',
+  },
+  {
+    slug: 'paraty',
+    nomeCurto: 'Paraty',
+    nomeCompleto: 'Paraty',
+    tipo: 'abrigado',
+  },
+  {
+    slug: 'juatinga',
+    nomeCurto: 'Juatinga',
+    nomeCompleto: 'Ponta da Juatinga',
+    tipo: 'aberto',
+  },
+]
+
+/**
  * Formata nome de exibição do ponto
  */
 export function formatPontoNome(nome: string): string {
   const map: Record<string, string> = {
     angra: 'Angra dos Reis',
-    abraao: 'Vila do Abraão (Ilha Grande)',
+    abraao: 'Abraão',
     paraty: 'Paraty',
-    juatinga: 'Ponta da Juatinga',
+    juatinga: 'Juatinga',
   }
   return map[nome.toLowerCase()] || nome.charAt(0).toUpperCase() + nome.slice(1)
+}
+
+/**
+ * Retorna os dados das próximas 48 horas a partir da hora atual mais próxima
+ */
+export function getNext48HoursForecast(hourly: PrevisaoHoraItem[]): {
+  items: PrevisaoHoraItem[]
+  currentHourIndex: number
+} {
+  if (!hourly || hourly.length === 0) {
+    return { items: [], currentHourIndex: -1 }
+  }
+
+  const current = getCurrentHourForecast(hourly)
+  let startIndex = 0
+
+  if (current) {
+    const idx = hourly.findIndex((item) => item.time === current.time)
+    if (idx !== -1) {
+      startIndex = idx
+    }
+  }
+
+  // Pegamos até 48 horas a partir do startIndex
+  const items = hourly.slice(startIndex, startIndex + 48)
+
+  return {
+    items,
+    currentHourIndex: 0, // Como começa na hora atual, o índice 0 é a hora atual
+  }
+}
+
+/**
+ * Agrupa os dados horários em 7 dias diários (hoje + 6 dias)
+ */
+export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaItem[] {
+  if (!hourly || hourly.length === 0) return []
+
+  const diasSemanaMap: Record<number, string> = {
+    0: 'Dom',
+    1: 'Seg',
+    2: 'Ter',
+    3: 'Qua',
+    4: 'Qui',
+    5: 'Sex',
+    6: 'Sáb',
+  }
+
+  // Agrupar por data (YYYY-MM-DD)
+  const grupos: Record<string, PrevisaoHoraItem[]> = {}
+  for (const item of hourly) {
+    const dateKey = item.time.slice(0, 10)
+    if (!grupos[dateKey]) {
+      grupos[dateKey] = []
+    }
+    grupos[dateKey].push(item)
+  }
+
+  const sortedDates = Object.keys(grupos).sort()
+  const now = new Date()
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  // Encontra ou filtra a partir de hoje (ou primeiras datas se hoje for anterior)
+  let validDates = sortedDates.filter((d) => d >= todayKey)
+  if (validDates.length === 0) {
+    validDates = sortedDates
+  }
+
+  // Pega no máximo 7 dias
+  const targetDates = validDates.slice(0, 7)
+
+  return targetDates.map((dateStr, idx) => {
+    const items = grupos[dateStr] || []
+    const isHoje = idx === 0 || dateStr === todayKey
+
+    // Criar objeto Date para obter dia da semana e formatar
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const dateObj = new Date(year, month - 1, day)
+    const nomeDia = isHoje ? 'Hoje' : diasSemanaMap[dateObj.getDay()] || ''
+    const dataExibicao = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
+
+    let maxVento: number | null = null
+    let maxOnda: number | null = null
+    let totalChuva = 0
+
+    for (const it of items) {
+      if (it.wind_speed_10m !== null) {
+        if (maxVento === null || it.wind_speed_10m > maxVento) {
+          maxVento = it.wind_speed_10m
+        }
+      }
+      if (it.wave_height !== null) {
+        if (maxOnda === null || it.wave_height > maxOnda) {
+          maxOnda = it.wave_height
+        }
+      }
+      if (it.precipitation !== null && it.precipitation > 0) {
+        totalChuva += it.precipitation
+      }
+    }
+
+    return {
+      dataIso: dateStr,
+      nomeDia,
+      dataExibicao,
+      isHoje,
+      ventoMax: maxVento !== null ? Math.round(maxVento * 10) / 10 : null,
+      ondaMax: maxOnda !== null ? Math.round(maxOnda * 100) / 100 : null,
+      chuvaTotal: Math.round(totalChuva * 10) / 10,
+    }
+  })
 }
 
 /**
