@@ -1,0 +1,85 @@
+/* Global styles - Theme, font, utilities, animations and global components */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Fundo muito escuro conforme especificação (#0a0e14), alto contraste e fonte Inter */
+    --background: 216 33% 6%;
+    --foreground: 210 20% 98%;
+
+    --card: 217 33% 10%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 217 33% 10%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 210 20% 98%;
+    --primary-foreground: 216 33% 6%;
+
+    --secondary: 217 28% 16%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 217 24% 18%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 217 28% 18%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 25% 20%;
+    --input: 217 25% 20%;
+    --ring: 212 96% 78%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 216 33% 6%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 210 20% 98%;
+    --sidebar-primary-foreground: 216 33% 6%;
+    --sidebar-accent: 217 28% 16%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 217 25% 20%;
+    --sidebar-ring: 212 96% 78%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-cyan-950 selection:text-cyan-200;
+    font-family:
+      'Inter',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+    background-color: #0a0e14;
+    color: #f1f5f9;
+  }
+
+  /* NEVER REMOVE THIS */
+  section[aria-label='Notifications alt+T'] {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+@layer utilities {
+  @keyframes pulse-slow {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
