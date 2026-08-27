@@ -227,12 +227,12 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
     }
   }
 
-  // 4. Fallback WhatsApp (wa.me) para desktop sem navigator.share
-  const handleShareWhatsAppFallback = () => {
+  // 4. Compartilhar via WhatsApp (wa.me)
+  const handleShareWhatsApp = () => {
     if (!briefingTexto) return
     const texto = formatShareText()
     const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.open(url, '_blank', 'noopener')
   }
 
   return (
@@ -366,16 +366,14 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
                     <span>Enviar por e-mail</span>
                   </DropdownMenuItem>
 
-                  {/* Fallback Opção 4: WhatsApp web direto (se NÃO houver navigator.share) */}
-                  {!hasNativeShare && (
-                    <DropdownMenuItem
-                      onClick={handleShareWhatsAppFallback}
-                      className="flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-300 hover:text-emerald-100 hover:bg-emerald-950/50 rounded-lg cursor-pointer transition-colors"
-                    >
-                      <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>WhatsApp</span>
-                    </DropdownMenuItem>
-                  )}
+                  {/* Opção 4: WhatsApp — sempre visível */}
+                  <DropdownMenuItem
+                    onClick={handleShareWhatsApp}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-300 hover:text-emerald-100 hover:bg-emerald-950/50 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>WhatsApp</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
