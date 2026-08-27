@@ -180,6 +180,45 @@ export async function fetchBriefingComandante(
   return data
 }
 
+export async function enviarBriefingEmail(
+  destinatario: string,
+  briefing: string,
+  data?: string,
+): Promise<{ success: boolean; message: string }> {
+  const backendUrl = pb.baseUrl || ''
+  const url = `${backendUrl}/backend/v1/enviar-briefing`
+
+  const dataFormatada = data || new Date().toLocaleDateString('pt-BR')
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      destinatario,
+      briefing,
+      data: dataFormatada,
+    }),
+  })
+
+  if (!res.ok) {
+    let errorDetail = 'Falha ao enviar e-mail'
+    try {
+      const errJson = await res.json()
+      if (errJson?.error) {
+        errorDetail = errJson.error
+      }
+    } catch {
+      errorDetail = `Erro no servidor (${res.status})`
+    }
+    throw new Error(errorDetail)
+  }
+
+  const result: { success: boolean; message: string } = await res.json()
+  return result
+}
+
 /**
  * Encontra a próxima janela disponível (no futuro ou em andamento)
  */

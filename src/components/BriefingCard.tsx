@@ -1,9 +1,38 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Anchor, RotateCw, Share2, Sparkles, AlertCircle } from 'lucide-react'
-import { fetchBriefingComandante } from '@/services/previsaoService'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Anchor,
+  RotateCw,
+  Share2,
+  Sparkles,
+  AlertCircle,
+  Copy,
+  Mail,
+  Smartphone,
+  MessageCircle,
+  Loader2,
+  Check,
+} from 'lucide-react'
+import { fetchBriefingComandante, enviarBriefingEmail } from '@/services/previsaoService'
 import { LoadingState } from '@/components/ui/LoadingState'
+import { useToast } from '@/hooks/use-toast'
 
 export interface BriefingCardProps {
   perfilId: string
@@ -20,10 +49,29 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
   updatedAtInicial,
   onBriefingUpdated,
 }) => {
+  const { toast } = useToast()
   const [briefingTexto, setBriefingTexto] = useState<string | null>(null)
   const [timestamp, setTimestamp] = useState<string | null>(null)
+  const [dataBriefing, setDataBriefing] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Estados do Modal de Envio por E-mail
+  const [emailModalOpen, setEmailModalOpen] = useState<boolean>(false)
+  const [emailDestinatario, setEmailDestinatario] = useState<string>('')
+  const [emailEnviando, setEmailEnviando] = useState<boolean>(false)
+  const [emailErro, setEmailErro] = useState<string | null>(null)
+
+  // Suporte a Web Share API nativo (navigator.share)
+  const [hasNativeShare, setHasNativeShare] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      setHasNativeShare(true)
+    } else {
+      setHasNativeShare(false)
+    }
+  }, [])
 
   // Ao carregar se já existir ultimoBriefingInicial nas preferências, inicializar
   useEffect(() => {
@@ -35,9 +83,13 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
           const hh = String(d.getHours()).padStart(2, '0')
           const mm = String(d.getMinutes()).padStart(2, '0')
           setTimestamp(`Gerado às ${hh}:${mm}`)
+          setDataBriefing(d.toLocaleDateString('pt-BR'))
         } catch {
           setTimestamp('Briefing salvo')
+          setDataBriefing(new Date().toLocaleDateString('pt-BR'))
         }
+      } else {
+        setDataBriefing(new Date().toLocaleDateString('pt-BR'))
       }
     }
   }, [ultimoBriefingInicial, updatedAtInicial, briefingTexto, loading])
@@ -54,11 +106,13 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
         const hh = String(d.getHours()).padStart(2, '0')
         const mm = String(d.getMinutes()).padStart(2, '0')
         setTimestamp(`Gerado às ${hh}:${mm}`)
+        setDataBriefing(d.toLocaleDateString('pt-BR'))
       } catch {
         const now = new Date()
         setTimestamp(
           `Gerado às ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         )
+        setDataBriefing(now.toLocaleDateString('pt-BR'))
       }
 
       if (onBriefingUpdated) {
@@ -72,11 +126,113 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
     }
   }
 
-  const handleShareWhatsApp = () => {
+  const formatShareText = () => {
+    if (!briefingTexto) return ''
+    return `⚓ *Clima Náutico — Briefing do Comandante*\n\n${briefingTexto}\n\n🌊 Baía de Ilha Grande`
+  }
+
+  // 1. Web Share nativo
+  const handleNativeShare = async () => {
     if (!briefingTexto) return
-    const textoCompartilhar = `⚓ *Clima Náutico — Briefing do Comandante*\n\n${briefingTexto}\n\n🌊 Baía de Ilha Grande`
-    const url = `https://wa.me/?text=${encodeURIComponent(textoCompartilhar)}`
-    window.open(url, '_blank')
+    const texto = formatShareText()
+    const dataRef = dataBriefing || new Date().toLocaleDateString('pt-BR')
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Briefing náutico — ${dataRef}`,
+          text: texto,
+        })
+      }
+    } catch (err: any) {
+      // Se o usuário cancelou o share sheet, ignoramos
+      if (err?.name !== 'AbortError') {
+        console.warn('Erro no navigator.share:', err)
+      }
+    }
+  }
+
+  // 2. Copiar texto
+  const handleCopiarTexto = async () => {
+    if (!briefingTexto) return
+    const texto = formatShareText()
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(texto)
+      } else {
+        // Fallback antigo caso clipboard API falhe
+        const textarea = document.createElement('textarea')
+        textarea.value = texto
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      toast({
+        title: 'Texto copiado!',
+        description: 'O briefing foi copiado para a área de transferência.',
+        duration: 2000,
+      })
+    } catch (err) {
+      console.error('Erro ao copiar texto:', err)
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Não foi possível copiar o texto automaticamente.',
+        variant: 'destructive',
+        duration: 2000,
+      })
+    }
+  }
+
+  // 3. Envio por e-mail
+  const handleAbrirEmailModal = () => {
+    setEmailErro(null)
+    setEmailModalOpen(true)
+  }
+
+  const handleEnviarEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!briefingTexto) return
+
+    const emailTrimmed = emailDestinatario.trim()
+    if (!emailTrimmed) {
+      setEmailErro('Informe o e-mail do destinatário.')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailTrimmed)) {
+      setEmailErro('Por favor, insira um e-mail válido.')
+      return
+    }
+
+    setEmailEnviando(true)
+    setEmailErro(null)
+
+    try {
+      const dataRef = dataBriefing || new Date().toLocaleDateString('pt-BR')
+      await enviarBriefingEmail(emailTrimmed, briefingTexto, dataRef)
+
+      setEmailModalOpen(false)
+      setEmailDestinatario('')
+      toast({
+        title: 'Briefing enviado!',
+        description: `O briefing foi enviado com sucesso para ${emailTrimmed}.`,
+        duration: 3000,
+      })
+    } catch (err: any) {
+      console.error('Erro ao enviar e-mail:', err)
+      setEmailErro(err?.message || 'Falha ao enviar e-mail. Tente novamente.')
+    } finally {
+      setEmailEnviando(false)
+    }
+  }
+
+  // 4. Fallback WhatsApp (wa.me) para desktop sem navigator.share
+  const handleShareWhatsAppFallback = () => {
+    if (!briefingTexto) return
+    const texto = formatShareText()
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -166,18 +322,149 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
                 Atualizar briefing
               </Button>
 
-              <Button
-                size="sm"
-                onClick={handleShareWhatsApp}
-                className="bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 border border-emerald-700/60 text-xs gap-1.5 shadow"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                Compartilhar no WhatsApp
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="bg-cyan-900/90 hover:bg-cyan-800 text-cyan-100 border border-cyan-600/60 text-xs gap-1.5 shadow"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Compartilhar
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 bg-[#0c1219] border border-cyan-900/70 text-zinc-200 shadow-xl rounded-xl p-1.5"
+                >
+                  {/* Opção 1: Web Share Nativo (celulares/dispositivos com suporte) */}
+                  {hasNativeShare && (
+                    <DropdownMenuItem
+                      onClick={handleNativeShare}
+                      className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <Smartphone className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <span>Compartilhar no dispositivo</span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {/* Opção 2: Copiar texto com Toast */}
+                  <DropdownMenuItem
+                    onClick={handleCopiarTexto}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <Copy className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Copiar texto</span>
+                  </DropdownMenuItem>
+
+                  {/* Opção 3: Enviar por e-mail */}
+                  <DropdownMenuItem
+                    onClick={handleAbrirEmailModal}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Enviar por e-mail</span>
+                  </DropdownMenuItem>
+
+                  {/* Fallback Opção 4: WhatsApp web direto (se NÃO houver navigator.share) */}
+                  {!hasNativeShare && (
+                    <DropdownMenuItem
+                      onClick={handleShareWhatsAppFallback}
+                      className="flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-300 hover:text-emerald-100 hover:bg-emerald-950/50 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>WhatsApp</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         )}
       </CardContent>
+
+      {/* Modal / Dialog de Envio de E-mail */}
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent className="sm:max-w-md bg-[#0d131b] border-cyan-900/60 text-zinc-100 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+              <Mail className="w-4 h-4 text-cyan-400" />
+              Enviar briefing por e-mail
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              O relatório do briefing náutico de {dataBriefing || 'hoje'} será enviado para o
+              destinatário.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEnviarEmail} className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="destinatario-email" className="text-xs font-medium text-zinc-300">
+                E-mail do destinatário
+              </Label>
+              <Input
+                id="destinatario-email"
+                type="email"
+                placeholder="exemplo@marina.com.br"
+                value={emailDestinatario}
+                onChange={(e) => {
+                  setEmailDestinatario(e.target.value)
+                  if (emailErro) setEmailErro(null)
+                }}
+                disabled={emailEnviando}
+                className="bg-[#070b10] border-zinc-700/80 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9"
+                autoFocus
+              />
+              {emailErro && (
+                <p className="text-[11px] text-red-400 flex items-center gap-1 mt-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {emailErro}
+                </p>
+              )}
+            </div>
+
+            <div className="p-3 bg-[#06090e] rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400 space-y-1">
+              <p className="font-semibold text-zinc-300">
+                Assunto: Briefing náutico — {dataBriefing || new Date().toLocaleDateString('pt-BR')}
+              </p>
+              <p className="line-clamp-2 text-zinc-500 italic">
+                {briefingTexto ? `"${briefingTexto.slice(0, 110)}..."` : ''}
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEmailModalOpen(false)}
+                disabled={emailEnviando}
+                className="bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={emailEnviando}
+                className="bg-cyan-800 hover:bg-cyan-700 text-white border border-cyan-600/50 text-xs gap-1.5 font-medium shadow-md"
+              >
+                {emailEnviando ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-3.5 h-3.5" />
+                    Enviar
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
