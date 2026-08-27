@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T23:57:03.801Z",
+  "generatedAt": "2026-08-27T00:02:03.010Z",
   "collections": [
     {
       "name": "users",
@@ -211,6 +211,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "dispositivo_uuid",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []

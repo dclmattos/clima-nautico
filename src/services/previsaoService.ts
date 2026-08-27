@@ -1,5 +1,98 @@
 import pb from '@/lib/pocketbase/client'
-import { Ponto, PrevisaoPayload, PrevisaoHoraItem, ResumoDiaItem } from '@/types/nautico'
+import {
+  Ponto,
+  PerfilNavegacao,
+  PrevisaoPayload,
+  PrevisaoHoraItem,
+  ResumoDiaItem,
+  JanelasPayload,
+  PreferenciasUsuario,
+} from '@/types/nautico'
+
+export async function fetchPerfis(): Promise<PerfilNavegacao[]> {
+  try {
+    const records = await pb.collection('perfis_navegacao').getFullList<PerfilNavegacao>({
+      sort: 'created',
+    })
+    return records
+  } catch (err: any) {
+    console.error('Erro ao buscar perfis_navegacao do PocketBase:', err)
+    return [
+      {
+        id: 'lancha',
+        nome: 'lancha',
+        vento_max_kt: 15,
+        rajada_max_kt: 22,
+        onda_max_m: 1.0,
+        periodo_min_s: null,
+        chuva_max_mm_h: 4,
+      },
+      {
+        id: 'veleiro',
+        nome: 'veleiro',
+        vento_max_kt: 22,
+        rajada_max_kt: 28,
+        onda_max_m: 1.5,
+        periodo_min_s: 6,
+        chuva_max_mm_h: 6,
+      },
+      {
+        id: 'jet',
+        nome: 'jet',
+        vento_max_kt: 12,
+        rajada_max_kt: 18,
+        onda_max_m: 0.6,
+        periodo_min_s: null,
+        chuva_max_mm_h: 2,
+      },
+    ]
+  }
+}
+
+export async function fetchPreferenciasPorDispositivo(
+  deviceId: string,
+): Promise<PreferenciasUsuario | null> {
+  try {
+    const record = await pb
+      .collection('preferencias')
+      .getFirstListItem<PreferenciasUsuario>(`dispositivo_uuid="${deviceId}"`)
+    return record
+  } catch {
+    return null
+  }
+}
+
+export async function salvarPreferenciasDispositivo(
+  deviceId: string,
+  perfilId: string,
+  pontoFavoritoId?: string,
+): Promise<PreferenciasUsuario> {
+  try {
+    const existing = await fetchPreferenciasPorDispositivo(deviceId)
+    if (existing && existing.id) {
+      const updated = await pb.collection('preferencias').update<PreferenciasUsuario>(existing.id, {
+        perfil_id: perfilId,
+        ...(pontoFavoritoId ? { ponto_favorito_id: pontoFavoritoId } : {}),
+      })
+      return updated
+    } else {
+      const created = await pb.collection('preferencias').create<PreferenciasUsuario>({
+        dispositivo_uuid: deviceId,
+        perfil_id: perfilId,
+        ...(pontoFavoritoId ? { ponto_favorito_id: pontoFavoritoId } : {}),
+        criado_em: new Date().toISOString(),
+      })
+      return created
+    }
+  } catch (err: any) {
+    console.warn('Falha ao salvar preferencias no PocketBase, mantendo em memória/local:', err)
+    return {
+      dispositivo_uuid: deviceId,
+      perfil_id: perfilId,
+      ponto_favorito_id: pontoFavoritoId,
+    }
+  }
+}
 
 export async function fetchPontos(): Promise<Ponto[]> {
   try {
@@ -33,6 +126,69 @@ export async function fetchPrevisaoPorPonto(pontoId: string): Promise<PrevisaoPa
 
   const data: PrevisaoPayload = await res.json()
   return data
+}
+
+export async function fetchJanelas(pontoId: string, perfilId: string): Promise<JanelasPayload> {
+  const backendUrl = pb.baseUrl || ''
+  const url = `${backendUrl}/backend/v1/janelas?ponto_id=${encodeURIComponent(
+    pontoId,
+  )}&perfil_id=${encodeURIComponent(perfilId)}`
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    let errorDetail = 'Falha ao obter janelas de navegação'
+    try {
+      const errJson = await res.json()
+      if (errJson?.error) {
+        errorDetail = errJson.error
+      }
+    } catch {
+      errorDetail = `Erro no servidor (${res.status})`
+    }
+    throw new Error(errorDetail)
+  }
+
+  const data: JanelasPayload = await res.json()
+  return data
+}
+
+/**
+ * Encontra a próxima janela disponível (no futuro ou em andamento)
+ */
+export function getProximaJanela(
+  janelas: JanelasPayload['janelas'],
+): JanelasPayload['janelas'][0] | null {
+  if (!janelas || janelas.length === 0) return null
+  const now = new Date()
+  const nowTime = now.getTime()
+
+  // Encontra a primeira janela cujo término é após agora
+  for (const j of janelas) {
+    const fimDate = new Date(j.fim).getTime()
+    if (fimDate >= nowTime - 3600000) {
+      return j
+    }
+  }
+  return janelas[0] || null
+}
+
+/**
+ * Formata exibição da janela: "Sáb 09h – 14h"
+ */
+export function formatarJanelaBadge(inicioIso: string, fimIso: string): string {
+  try {
+    const inicio = new Date(inicioIso)
+    const fim = new Date(fimIso)
+
+    const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+    const diaSemana = dias[inicio.getDay()]
+    const horaInicio = String(inicio.getHours()).padStart(2, '0') + 'h'
+    const horaFim = String(fim.getHours()).padStart(2, '0') + 'h'
+
+    return `${diaSemana} ${horaInicio}–${horaFim}`
+  } catch {
+    return `${inicioIso.slice(11, 16)}–${fimIso.slice(11, 16)}`
+  }
 }
 
 /**
