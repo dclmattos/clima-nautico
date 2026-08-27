@@ -445,7 +445,10 @@ export default function TravessiaPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 pb-24 text-zinc-100">
+    <div
+      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="max-w-4xl mx-auto px-4 py-6 space-y-6 text-zinc-100"
+    >
       {/* Cabeçalho */}
       <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
         <div className="flex items-center gap-3">

@@ -46,7 +46,10 @@ export default function Layout() {
       </main>
 
       {/* Barra de Navegação Inferior Fixa (Mobile e Desktop) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0d1218]/95 backdrop-blur-md border-t border-zinc-800/80 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+      <nav
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="fixed bottom-0 left-0 right-0 z-50 bg-[#0d1218]/95 backdrop-blur-md border-t border-zinc-800/80 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]"
+      >
         <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-around">
           {navItems.map((item) => {
             const active = isActive(item.to, item.exact)

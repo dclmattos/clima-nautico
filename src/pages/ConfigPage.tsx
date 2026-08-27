@@ -410,7 +410,10 @@ export const ConfigPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6">
+    <div
+      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100"
+    >
       <div className="w-full max-w-3xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
         {/* Header da Página */}
         <header className="mb-6 flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">

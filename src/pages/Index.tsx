@@ -264,7 +264,10 @@ export const Index: React.FC = () => {
   }, [pontosEstados])
 
   return (
-    <div className="space-y-6 pb-12">
+    <div
+      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="space-y-6"
+    >
       {/* Bloco 1: Briefing do Comandante (IA) */}
       <section aria-label="Briefing do Comandante">
         <BriefingCard />

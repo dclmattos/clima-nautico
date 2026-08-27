@@ -247,7 +247,10 @@ export const JanelasPage: React.FC = () => {
         )
 
   return (
-    <div className="space-y-6 pb-12">
+    <div
+      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="space-y-6"
+    >
       {/* Cabeçalho da Página */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>

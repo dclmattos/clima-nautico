@@ -192,7 +192,10 @@ export const PontoDetalhePage: React.FC = () => {
   }, [carregarDados])
 
   return (
-    <div className="space-y-4 pb-12">
+    <div
+      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="space-y-4"
+    >
       {/* Botão Superior de Voltar */}
       <div className="flex items-center justify-between">
         <Button
