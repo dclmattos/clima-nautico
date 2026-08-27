@@ -933,17 +933,16 @@ routerAdd('POST', '/backend/v1/narrativa-travessia', (e) => {
     })
   }
 
-  globalThis._travessiaLimites[limitKey] = currentCount + 1
-
   const systemPrompt =
     'Você é um comandante experiente da Baía de Ilha Grande. Descreva a travessia abaixo em no máximo 5 linhas em português, em tom direto, técnico e útil. Cite o veredito, as condições de vento e onda no percurso (proa/través/popa), o fator limitante e a alternativa recomendada se houver. Não invente dados — use apenas o JSON.'
 
   const userPrompt = 'Dados da travessia:\n' + JSON.stringify(resultado, null, 2)
 
   let narrativaTexto = ''
+  let aiResponse = null
 
   try {
-    const aiResponse = $ai.chat({
+    aiResponse = $ai.chat({
       model: 'fast',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -952,46 +951,37 @@ routerAdd('POST', '/backend/v1/narrativa-travessia', (e) => {
       max_tokens: 300,
     })
 
+    // 1. Tentar primeiro formato OpenAI: aiResponse?.choices?.[0]?.message?.content
     if (
       aiResponse &&
       aiResponse.choices &&
       aiResponse.choices.length > 0 &&
-      aiResponse.choices[0].message
+      aiResponse.choices[0].message &&
+      aiResponse.choices[0].message.content
     ) {
       narrativaTexto = (aiResponse.choices[0].message.content || '').trim()
     }
+
+    // 2. Se vier vazio, percorrer content blocks (array aiResponse?.content)
+    if (!narrativaTexto && aiResponse && Array.isArray(aiResponse.content)) {
+      narrativaTexto = aiResponse.content
+        .filter((block) => block && block.type === 'text' && block.text)
+        .map((block) => block.text)
+        .join('')
+        .trim()
+    }
   } catch (err) {
     console.log('Erro na IA narrativa-travessia:', err && err.message ? err.message : String(err))
-    // Fallback inteligente
-    const oNome = resultado.origem?.nome || 'Origem'
-    const dNome = resultado.destino?.nome || 'Destino'
-    const v = resultado.veredito || 'amarelo'
-    const dNm = resultado.distancia_nm || 0
-    const etaStr = resultado.eta ? resultado.eta.slice(11, 16) : '--:--'
-    const alt = resultado.melhor_alternativa
-    narrativaTexto =
-      'Travessia ' +
-      oNome +
-      ' ➔ ' +
-      dNome +
-      ' (' +
-      dNm +
-      ' NM): Veredito ' +
-      v.toUpperCase() +
-      ', ETA ' +
-      etaStr +
-      'h.\n' +
-      (resultado.aviso ? 'Alerta: ' + resultado.aviso + '.\n' : '') +
-      (alt
-        ? 'Melhor alternativa: saída às ' +
-          alt.hora_saida.slice(11, 16) +
-          'h com veredito ' +
-          alt.veredito +
-          ' (fator: ' +
-          alt.fator_limitante +
-          ').'
-        : 'Condições favoráveis para cruzeiro seguro.')
   }
+
+  // 3. Se ainda assim narrativaTexto ficar vazio: registrar log, NÃO decrementar cota e retornar 502
+  if (!narrativaTexto) {
+    console.log('IA resposta bruta:', JSON.stringify(aiResponse))
+    return e.json(502, { erro: 'IA não retornou texto' })
+  }
+
+  // 4. Sucesso: decrementar cota diária e retornar 200 com a narrativa
+  globalThis._travessiaLimites[limitKey] = currentCount + 1
 
   return e.json(200, {
     narrativa: narrativaTexto,

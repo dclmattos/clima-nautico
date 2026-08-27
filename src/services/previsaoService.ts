@@ -382,7 +382,9 @@ export async function fetchNarrativaTravessia(
     let errorDetail = 'Não foi possível obter a narrativa do comandante'
     try {
       const errJson = await res.json()
-      if (errJson?.error) {
+      if (errJson?.erro) {
+        errorDetail = errJson.erro
+      } else if (errJson?.error) {
         errorDetail = errJson.error
       }
     } catch {

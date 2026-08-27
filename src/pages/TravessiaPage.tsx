@@ -1009,12 +1009,10 @@ export default function TravessiaPage() {
               </CardContent>
             </Card>
           ) : (
-            resultado.veredito !== 'verde' && (
-              <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-400 text-xs flex items-center gap-2">
-                <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
-                <span>Nenhuma saída melhor nas próximas 24 h</span>
-              </div>
-            )
+            <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-400 text-xs flex items-center gap-2">
+              <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
+              <span>Nenhuma saída melhor nas próximas 24 h</span>
+            </div>
           )}
 
           {/* LINHA DO TEMPO DAS 3 AMOSTRAS */}
