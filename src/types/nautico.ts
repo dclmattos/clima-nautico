@@ -60,6 +60,8 @@ export interface ResumoDiaItem {
   ondaMax: number | null
   ondaMaxDouglas: number
   chuvaTotal: number
+  temperaturaMax?: number | null
+  temperaturaMin?: number | null
   weatherCode?: number | null
 }
 
@@ -225,6 +227,8 @@ export interface PrevisaoPayload {
     sunrise: string | null
     sunset: string | null
     daylight_duration: number | null
+    temperature_2m_max?: number | null
+    temperature_2m_min?: number | null
   }>
   astronomia: AstronomiaPayload
   pressao_tendencia: PressaoTendenciaPayload

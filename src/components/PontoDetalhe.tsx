@@ -475,71 +475,88 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
 
             {/* ABA 2: RESUMO 7 DIAS */}
             <TabsContent value="7dias" className="space-y-3 m-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {diasResumo.map((dia, idx) => {
-                  const sky = getWeatherCondition(dia.weatherCode)
-                  return (
-                    <div
-                      key={idx}
-                      className={`p-4 rounded-xl border flex flex-col justify-between gap-3 ${
-                        dia.isHoje
-                          ? 'bg-cyan-950/40 border-cyan-700/60 shadow-md'
-                          : 'bg-[#161c24] border-zinc-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                        <span className="font-bold text-sm text-white flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                          {dia.nomeDia}
-                        </span>
-                        <span className="text-xs font-mono text-zinc-400">{dia.dataExibicao}</span>
-                      </div>
-
-                      <div className="space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-400 flex items-center gap-1">
-                            <Sun className="w-3 h-3 text-amber-400" /> Céu
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1 font-medium ${sky.color}`}
-                          >
-                            {renderSkyIcon(sky.iconName, 'w-3.5 h-3.5 shrink-0')}
-                            <span>{sky.label}</span>
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-400 flex items-center gap-1">
-                            <Wind className="w-3 h-3 text-sky-400" /> Vento Máx
-                          </span>
-                          <span className="font-mono font-bold text-white">
-                            {dia.ventoMax !== null
-                              ? `${dia.ventoMax} kt (F${dia.ventoMaxBeaufort})`
-                              : '--'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-400 flex items-center gap-1">
-                            <Waves className="w-3 h-3 text-cyan-400" /> Onda Máx
-                          </span>
-                          <span className="font-mono font-bold text-cyan-300">
-                            {dia.ondaMax !== null
-                              ? `${dia.ondaMax} m (G${dia.ondaMaxDouglas})`
-                              : '--'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-400 flex items-center gap-1">
-                            <CloudRain className="w-3 h-3 text-indigo-400" /> Chuva Total
-                          </span>
-                          <span className="font-mono text-zinc-300">{dia.chuvaTotal} mm</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
+                    <tr>
+                      <th className="p-3">Data / Dia</th>
+                      <th className="p-3">Céu</th>
+                      <th className="p-3">Temp</th>
+                      <th className="p-3">Vento Máx</th>
+                      <th className="p-3">Onda Máx</th>
+                      <th className="p-3">Chuva Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/60 font-mono">
+                    {diasResumo.map((dia, idx) => {
+                      const sky = getWeatherCondition(dia.weatherCode)
+                      return (
+                        <tr
+                          key={idx}
+                          className={`hover:bg-[#1c2430] transition-colors text-zinc-200 ${
+                            dia.isHoje ? 'bg-cyan-950/25' : ''
+                          }`}
+                        >
+                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
+                            <span className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <span className={dia.isHoje ? 'text-cyan-300 font-bold' : ''}>
+                                {dia.nomeDia}
+                              </span>
+                              <span className="text-zinc-400 font-mono text-[11px]">
+                                ({dia.dataExibicao})
+                              </span>
+                            </span>
+                          </td>
+                          <td className="p-3 font-sans whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 text-xs ${sky.color}`}>
+                              {renderSkyIcon(sky.iconName, 'w-4 h-4 shrink-0')}
+                              <span>{sky.label}</span>
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap font-mono">
+                            {dia.temperaturaMax !== null && dia.temperaturaMax !== undefined ? (
+                              <span>
+                                <span className="font-bold text-white">{dia.temperaturaMax}°</span>
+                                <span className="text-zinc-500 mx-1">/</span>
+                                <span className="text-zinc-400">
+                                  {dia.temperaturaMin !== null && dia.temperaturaMin !== undefined
+                                    ? `${dia.temperaturaMin}°`
+                                    : '--'}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500">--</span>
+                            )}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="font-bold text-sky-300">
+                              {dia.ventoMax !== null ? `${dia.ventoMax} kt` : '--'}
+                            </span>
+                            {dia.ventoMax !== null && (
+                              <span className="text-zinc-400 text-[11px] ml-1">
+                                (F{dia.ventoMaxBeaufort})
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="font-bold text-cyan-300">
+                              {dia.ondaMax !== null ? `${dia.ondaMax} m` : '--'}
+                            </span>
+                            {dia.ondaMax !== null && (
+                              <span className="text-zinc-400 text-[11px] ml-1">
+                                (G{dia.ondaMaxDouglas})
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-zinc-400 whitespace-nowrap">
+                            {dia.chuvaTotal} mm
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </TabsContent>
           </Tabs>

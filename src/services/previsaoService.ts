@@ -863,6 +863,8 @@ export function aggregate7DaysForecast(
     sunrise: string | null
     sunset: string | null
     daylight_duration?: number | null
+    temperature_2m_max?: number | null
+    temperature_2m_min?: number | null
   }>,
 ): ResumoDiaItem[] {
   if (!hourly || hourly.length === 0) return []
@@ -877,12 +879,28 @@ export function aggregate7DaysForecast(
     6: 'Sáb',
   }
 
-  const sunMap: Record<string, { sunrise: number | null; sunset: number | null }> = {}
+  const sunMap: Record<
+    string,
+    {
+      sunrise: number | null
+      sunset: number | null
+      tempMax: number | null
+      tempMin: number | null
+    }
+  > = {}
   if (daily && daily.length > 0) {
     for (const d of daily) {
       sunMap[d.date] = {
         sunrise: d.sunrise ? new Date(d.sunrise).getTime() : null,
         sunset: d.sunset ? new Date(d.sunset).getTime() : null,
+        tempMax:
+          d.temperature_2m_max !== undefined && d.temperature_2m_max !== null
+            ? d.temperature_2m_max
+            : null,
+        tempMin:
+          d.temperature_2m_min !== undefined && d.temperature_2m_min !== null
+            ? d.temperature_2m_min
+            : null,
       }
     }
   }
@@ -919,6 +937,8 @@ export function aggregate7DaysForecast(
     let maxVento: number | null = null
     let maxOnda: number | null = null
     let totalChuva = 0
+    let maxTempHourly: number | null = null
+    let minTempHourly: number | null = null
 
     // Determina o período diurno para o dia
     const daySun = sunMap[dateStr]
@@ -955,6 +975,14 @@ export function aggregate7DaysForecast(
       }
       if (it.precipitation !== null && it.precipitation > 0) {
         totalChuva += it.precipitation
+      }
+      if (it.temperature_2m !== null && it.temperature_2m !== undefined) {
+        if (maxTempHourly === null || it.temperature_2m > maxTempHourly) {
+          maxTempHourly = it.temperature_2m
+        }
+        if (minTempHourly === null || it.temperature_2m < minTempHourly) {
+          minTempHourly = it.temperature_2m
+        }
       }
 
       if (it.weather_code !== null && it.weather_code !== undefined) {
@@ -1002,6 +1030,11 @@ export function aggregate7DaysForecast(
       weatherCodePredominante = mostFreqCode
     }
 
+    const finalTempMax =
+      daySun?.tempMax !== null && daySun?.tempMax !== undefined ? daySun.tempMax : maxTempHourly
+    const finalTempMin =
+      daySun?.tempMin !== null && daySun?.tempMin !== undefined ? daySun.tempMin : minTempHourly
+
     return {
       dataIso: dateStr,
       nomeDia,
@@ -1012,6 +1045,10 @@ export function aggregate7DaysForecast(
       ondaMax: maxOnda !== null ? Math.round(maxOnda * 100) / 100 : null,
       ondaMaxDouglas: maxOnda !== null ? getDouglasScale(maxOnda).grau : 0,
       chuvaTotal: Math.round(totalChuva * 10) / 10,
+      temperaturaMax:
+        finalTempMax !== null && finalTempMax !== undefined ? Math.round(finalTempMax) : null,
+      temperaturaMin:
+        finalTempMin !== null && finalTempMin !== undefined ? Math.round(finalTempMin) : null,
       weatherCode: weatherCodePredominante,
     }
   })

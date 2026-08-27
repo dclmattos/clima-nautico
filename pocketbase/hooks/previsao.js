@@ -85,14 +85,14 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   }
 
   // 3. Consulta endpoints do Open-Meteo
-  // Forecast: daily=sunrise,sunset,daylight_duration & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code
+  // Forecast: daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
     '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code' +
-    '&daily=sunrise,sunset,daylight_duration' +
+    '&daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min' +
     '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=7'
 
   // Marine: hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction
@@ -604,11 +604,13 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     })
   }
 
-  // Daily astronomia do Open-Meteo
+  // Daily astronomia e temperaturas do Open-Meteo
   const dailyData = weatherData.daily || {}
   const dailySunrise = dailyData.sunrise || []
   const dailySunset = dailyData.sunset || []
   const dailyDaylight = dailyData.daylight_duration || []
+  const dailyTempMax = dailyData.temperature_2m_max || []
+  const dailyTempMin = dailyData.temperature_2m_min || []
   const dailyTimes = dailyData.time || []
 
   const dailyList = []
@@ -618,6 +620,8 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       sunrise: dailySunrise[i] || null,
       sunset: dailySunset[i] || null,
       daylight_duration: dailyDaylight[i] || null,
+      temperature_2m_max: dailyTempMax[i] !== undefined ? dailyTempMax[i] : null,
+      temperature_2m_min: dailyTempMin[i] !== undefined ? dailyTempMin[i] : null,
     })
   }
 
