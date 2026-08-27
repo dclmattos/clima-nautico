@@ -131,10 +131,31 @@ const Index: React.FC = () => {
 
       if (!pontos || pontos.length === 0) {
         pontos = [
-          { id: 'angra', nome: 'angra', lat: -23.005, lon: -44.318, tipo: 'abrigado' },
-          { id: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
-          { id: 'paraty', nome: 'paraty', lat: -23.22, lon: -44.7, tipo: 'abrigado' },
-          { id: 'juatinga', nome: 'juatinga', lat: -23.3, lon: -44.5, tipo: 'aberto' },
+          {
+            id: 'angra',
+            slug: 'angra',
+            nome: 'angra',
+            lat: -23.005,
+            lon: -44.318,
+            tipo: 'abrigado',
+          },
+          { id: 'abraao', slug: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
+          {
+            id: 'paraty',
+            slug: 'paraty',
+            nome: 'paraty',
+            lat: -23.22,
+            lon: -44.7,
+            tipo: 'abrigado',
+          },
+          {
+            id: 'juatinga',
+            slug: 'juatinga',
+            nome: 'juatinga',
+            lat: -23.3,
+            lon: -44.5,
+            tipo: 'aberto',
+          },
         ]
       }
 

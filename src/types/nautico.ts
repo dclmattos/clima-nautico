@@ -2,6 +2,7 @@ export type TipoPonto = 'abrigado' | 'semi' | 'aberto'
 
 export interface Ponto {
   id: string
+  slug?: string
   nome: string
   lat: number
   lon: number

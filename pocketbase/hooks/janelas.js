@@ -6,15 +6,19 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     return e.json(400, { error: "Parâmetros 'ponto_id' e 'perfil_id' são obrigatórios" })
   }
 
-  // 1. Busca o ponto no PocketBase (por id ou pelo campo nome caso passado slug como "angra")
+  // 1. Busca o ponto no PocketBase (por id, por slug ou pelo campo nome caso passado slug como "angra")
   let ponto
   try {
     ponto = $app.findRecordById('pontos', pontoId)
   } catch (err) {
     try {
-      ponto = $app.findFirstRecordByData('pontos', 'nome', pontoId)
-    } catch (err2) {
-      return e.json(404, { error: 'Ponto não encontrado: ' + pontoId })
+      ponto = $app.findFirstRecordByData('pontos', 'slug', pontoId)
+    } catch (errSlug) {
+      try {
+        ponto = $app.findFirstRecordByData('pontos', 'nome', pontoId)
+      } catch (errNome) {
+        return e.json(404, { error: 'Ponto não encontrado: ' + pontoId })
+      }
     }
   }
 

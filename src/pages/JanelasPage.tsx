@@ -92,10 +92,31 @@ export const JanelasPage: React.FC = () => {
 
       if (!pontos || pontos.length === 0) {
         pontos = [
-          { id: 'angra', nome: 'angra', lat: -23.005, lon: -44.318, tipo: 'abrigado' },
-          { id: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
-          { id: 'paraty', nome: 'paraty', lat: -23.22, lon: -44.7, tipo: 'abrigado' },
-          { id: 'juatinga', nome: 'juatinga', lat: -23.3, lon: -44.5, tipo: 'aberto' },
+          {
+            id: 'angra',
+            slug: 'angra',
+            nome: 'angra',
+            lat: -23.005,
+            lon: -44.318,
+            tipo: 'abrigado',
+          },
+          { id: 'abraao', slug: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
+          {
+            id: 'paraty',
+            slug: 'paraty',
+            nome: 'paraty',
+            lat: -23.22,
+            lon: -44.7,
+            tipo: 'abrigado',
+          },
+          {
+            id: 'juatinga',
+            slug: 'juatinga',
+            nome: 'juatinga',
+            lat: -23.3,
+            lon: -44.5,
+            tipo: 'aberto',
+          },
         ]
       }
 
@@ -291,7 +312,10 @@ export const JanelasPage: React.FC = () => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => navigate(`/ponto/${ponto.id || ponto.nome.toLowerCase()}`)}
+                      onClick={() => {
+                        const slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
+                        navigate(`/ponto/${slugDestino}`)
+                      }}
                       className="text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40 gap-1 p-1 sm:px-2.5"
                     >
                       <span>Ver detalhes</span>

@@ -16,10 +16,12 @@ export const PontoDetalhePage: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
   // Normalização do slug
-  const activeSlug = slug?.toLowerCase() || 'angra'
+  const activeSlug = slug?.toLowerCase().trim() || 'angra'
 
   // Validar se o slug é um dos pontos conhecidos
-  const isValidSlug = PONTOS_DISPONIVEIS.some((p) => p.slug === activeSlug)
+  const isValidSlug = PONTOS_DISPONIVEIS.some(
+    (p) => p.slug === activeSlug || p.nomeCurto.toLowerCase() === activeSlug,
+  )
 
   const carregarDadosPonto = useCallback(async (pontoSlug: string, isManualRefresh = false) => {
     if (isManualRefresh) {

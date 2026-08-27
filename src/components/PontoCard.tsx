@@ -255,7 +255,8 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
   const arrowRotation = windDirDeg
 
   const handleClickCard = () => {
-    navigate(`/ponto/${ponto.id || ponto.nome.toLowerCase()}`)
+    const slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
+    navigate(`/ponto/${slugDestino}`)
   }
 
   return (
