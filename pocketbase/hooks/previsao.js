@@ -85,13 +85,13 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   }
 
   // 3. Consulta endpoints do Open-Meteo
-  // Forecast: daily=sunrise,sunset,daylight_duration & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index
+  // Forecast: daily=sunrise,sunset,daylight_duration & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index' +
+    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code' +
     '&daily=sunrise,sunset,daylight_duration' +
     '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=7'
 
@@ -247,6 +247,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   const wPressure = weatherData.hourly.surface_pressure || []
   const wCloudCover = weatherData.hourly.cloud_cover || []
   const wUvIndex = weatherData.hourly.uv_index || []
+  const wWeatherCode = weatherData.hourly.weather_code || []
 
   const mergedHourly = []
 
@@ -279,6 +280,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       surface_pressure: wPressure[i] !== undefined ? wPressure[i] : null,
       cloud_cover: wCloudCover[i] !== undefined ? wCloudCover[i] : null,
       uv_index: wUvIndex[i] !== undefined ? wUvIndex[i] : null,
+      weather_code: wWeatherCode[i] !== undefined ? wWeatherCode[i] : null,
       wave_height: waveH,
       wave_period: mData.wave_period,
       douglas_grau: waveH !== null ? getDouglas(waveH).grau : 0,
@@ -632,6 +634,10 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     lat: lat,
     lon: lon,
     timezone: weatherData.timezone || 'America/Sao_Paulo',
+    weather_code:
+      currentItem.weather_code !== undefined && currentItem.weather_code !== null
+        ? currentItem.weather_code
+        : null,
     hourly: mergedHourly,
     daily: dailyList,
     astronomia: {

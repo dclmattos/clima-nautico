@@ -946,6 +946,56 @@ export function formatTipoPonto(tipo: string): string {
 }
 
 /**
+ * Mapeamento de código WMO (0-99) para ícone Lucide, rótulo e classe de cor
+ */
+export function getWeatherCondition(code: number | null | undefined): {
+  iconName:
+    | 'Sun'
+    | 'CloudSun'
+    | 'Cloud'
+    | 'CloudFog'
+    | 'CloudDrizzle'
+    | 'CloudRain'
+    | 'CloudLightning'
+    | 'CloudOff'
+  label: string
+  color: string
+} {
+  if (code === null || code === undefined || isNaN(code)) {
+    return { iconName: 'CloudOff', label: '—', color: 'text-zinc-500' }
+  }
+
+  const c = Math.round(code)
+
+  if (c === 0 || c === 1) {
+    return { iconName: 'Sun', label: 'Sol', color: 'text-zinc-400' }
+  }
+  if (c === 2) {
+    return { iconName: 'CloudSun', label: 'Parcial', color: 'text-zinc-400' }
+  }
+  if (c === 3) {
+    return { iconName: 'Cloud', label: 'Nublado', color: 'text-zinc-400' }
+  }
+  if (c >= 45 && c <= 48) {
+    return { iconName: 'CloudFog', label: 'Névoa', color: 'text-zinc-400' }
+  }
+  if (c >= 51 && c <= 67) {
+    return { iconName: 'CloudDrizzle', label: 'Chuva', color: 'text-zinc-400' }
+  }
+  if (c >= 71 && c <= 77) {
+    return { iconName: 'CloudRain', label: 'Chuva', color: 'text-zinc-400' }
+  }
+  if (c >= 80 && c <= 82) {
+    return { iconName: 'CloudRain', label: 'Chuva forte', color: 'text-zinc-400' }
+  }
+  if (c >= 95 && c <= 99) {
+    return { iconName: 'CloudLightning', label: 'Tempestade', color: 'text-amber-400' }
+  }
+
+  return { iconName: 'CloudOff', label: '—', color: 'text-zinc-500' }
+}
+
+/**
  * Calcula rotas (distância e rumo verdadeiro) entre uma origem e uma lista de destinos
  */
 export function calcularRotasNauticas(

@@ -10,6 +10,7 @@ import {
   formatTimeHHMM,
   formatCoordinatesDMM,
   formatarJanelaBadge,
+  getWeatherCondition,
 } from '@/services/previsaoService'
 import {
   Wind,
@@ -27,6 +28,12 @@ import {
   Copy,
   Check,
   Droplets,
+  CloudSun,
+  Cloud,
+  CloudFog,
+  CloudDrizzle,
+  CloudLightning,
+  CloudOff,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
@@ -303,6 +310,36 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
   const scoreVal = currentScore !== undefined ? currentScore : null
   const scoreOffset = scoreVal !== null ? 100 - scoreVal : 100
 
+  // Condição do céu
+  const weatherCode =
+    currentHourData?.weather_code !== undefined && currentHourData?.weather_code !== null
+      ? currentHourData.weather_code
+      : data?.weather_code !== undefined && data?.weather_code !== null
+        ? data.weather_code
+        : null
+  const skyCondition = getWeatherCondition(weatherCode)
+
+  const renderSkyIcon = (iconName: string, className: string) => {
+    switch (iconName) {
+      case 'Sun':
+        return <Sun className={className} />
+      case 'CloudSun':
+        return <CloudSun className={className} />
+      case 'Cloud':
+        return <Cloud className={className} />
+      case 'CloudFog':
+        return <CloudFog className={className} />
+      case 'CloudDrizzle':
+        return <CloudDrizzle className={className} />
+      case 'CloudRain':
+        return <CloudRain className={className} />
+      case 'CloudLightning':
+        return <CloudLightning className={className} />
+      default:
+        return <CloudOff className={className} />
+    }
+  }
+
   const handleCardClick = () => {
     let slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
     if (isCustom) {
@@ -347,41 +384,49 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
               </div>
             </div>
 
-            {/* Score Circular */}
-            <div className="flex flex-col items-center">
-              <div className="relative w-12 h-12 flex items-center justify-center">
-                <svg className="w-12 h-12 -rotate-90 transform" viewBox="0 0 36 36">
-                  <path
-                    className="text-zinc-800"
-                    strokeWidth="3"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  {scoreVal !== null && (
+            {/* Canto superior direito: Indicador de Condição do Céu + Score Circular */}
+            <div className="flex items-center gap-3">
+              {/* Indicador de Condição do Céu */}
+              <div className={`flex items-center gap-1 text-xs ${skyCondition.color}`}>
+                {renderSkyIcon(skyCondition.iconName, 'w-4 h-4 shrink-0')}
+                <span>{skyCondition.label}</span>
+              </div>
+
+              {/* Score Circular */}
+              <div className="flex flex-col items-center">
+                <div className="relative w-12 h-12 flex items-center justify-center">
+                  <svg className="w-12 h-12 -rotate-90 transform" viewBox="0 0 36 36">
                     <path
-                      strokeDasharray="100, 100"
-                      strokeDashoffset={scoreOffset}
+                      className="text-zinc-800"
                       strokeWidth="3"
-                      strokeLinecap="round"
-                      stroke={getScoreStrokeColor(scoreVal)}
+                      stroke="currentColor"
                       fill="none"
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
-                  )}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className={`text-xs font-black ${getScoreColorClass(scoreVal)}`}>
-                    {scoreVal !== null ? scoreVal : '--'}
-                  </span>
-                  <span className="text-[8px] text-zinc-400 -mt-0.5">pts</span>
+                    {scoreVal !== null && (
+                      <path
+                        strokeDasharray="100, 100"
+                        strokeDashoffset={scoreOffset}
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        stroke={getScoreStrokeColor(scoreVal)}
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                    )}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-xs font-black ${getScoreColorClass(scoreVal)}`}>
+                      {scoreVal !== null ? scoreVal : '--'}
+                    </span>
+                    <span className="text-[8px] text-zinc-400 -mt-0.5">pts</span>
+                  </div>
                 </div>
+                <span className="text-[9px] text-zinc-400 font-medium mt-0.5">Score</span>
               </div>
-              <span className="text-[9px] text-zinc-400 font-medium mt-0.5">Score</span>
             </div>
           </div>
         </CardHeader>
-
         {/* Corpo com Grid de Condições */}
         <CardContent className="p-4 space-y-3.5">
           {/* Métricas Principais (Vento, Onda, Maré/Chuva) */}

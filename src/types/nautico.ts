@@ -37,6 +37,7 @@ export interface PrevisaoHoraItem {
   surface_pressure: number | null
   cloud_cover: number | null
   uv_index: number | null
+  weather_code?: number | null
   wave_height: number | null
   wave_period: number | null
   douglas_grau: number
@@ -216,6 +217,7 @@ export interface PrevisaoPayload {
   lat: number
   lon: number
   timezone: string
+  weather_code?: number | null
   hourly: PrevisaoHoraItem[]
   daily: Array<{
     date: string

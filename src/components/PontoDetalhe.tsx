@@ -17,6 +17,7 @@ import {
   getNext48HoursForecast,
   aggregate7DaysForecast,
   PONTOS_DISPONIVEIS,
+  getWeatherCondition,
 } from '@/services/previsaoService'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +44,12 @@ import {
   Minus,
   RefreshCw,
   Droplets,
+  CloudSun,
+  Cloud,
+  CloudFog,
+  CloudDrizzle,
+  CloudLightning,
+  CloudOff,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
@@ -147,6 +154,27 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
     const idx = Math.round((deg % 360) / 45) % 8
     return dirs[idx]
+  }
+
+  const renderSkyIcon = (iconName: string, className: string) => {
+    switch (iconName) {
+      case 'Sun':
+        return <Sun className={className} />
+      case 'CloudSun':
+        return <CloudSun className={className} />
+      case 'Cloud':
+        return <Cloud className={className} />
+      case 'CloudFog':
+        return <CloudFog className={className} />
+      case 'CloudDrizzle':
+        return <CloudDrizzle className={className} />
+      case 'CloudRain':
+        return <CloudRain className={className} />
+      case 'CloudLightning':
+        return <CloudLightning className={className} />
+      default:
+        return <CloudOff className={className} />
+    }
   }
 
   const formatHoraTabela = (timeIso: string) => {
@@ -347,6 +375,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
                       <th className="p-3">Horário</th>
+                      <th className="p-3">Céu</th>
                       <th className="p-3">Vento (kt)</th>
                       <th className="p-3">Rajada (kt)</th>
                       <th className="p-3">Direção</th>
@@ -359,6 +388,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
                     {forecast48h.map((item, idx) => {
+                      const sky = getWeatherCondition(item.weather_code)
                       const vento =
                         item.wind_speed_10m !== null ? Math.round(item.wind_speed_10m) : '--'
                       const raj =
@@ -381,8 +411,14 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           key={idx}
                           className="hover:bg-[#1c2430] transition-colors text-zinc-200"
                         >
-                          <td className="p-3 font-sans font-medium text-white">
+                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
                             {formatHoraTabela(item.time)}
+                          </td>
+                          <td className="p-3 font-sans whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 text-xs ${sky.color}`}>
+                              {renderSkyIcon(sky.iconName, 'w-3.5 h-3.5 shrink-0')}
+                              <span>{sky.label}</span>
+                            </span>
                           </td>
                           <td className="p-3 font-bold text-sky-300">{vento}</td>
                           <td className="p-3 text-amber-400">{raj}</td>
