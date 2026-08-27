@@ -856,13 +856,16 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   let bestRank = principalRank
   let bestMinScore = principalMinScore
 
-  // Regra 3: A varredura de alternativas deve considerar APENAS saídas posteriores à hora atual
-  // em America/Sao_Paulo (-03:00), a partir da PRÓXIMA hora cheia.
-  // Ex: se agora são 14:35 BRT, a primeira saída candidata é 15:00.
-  // O intervalo máximo continua sendo 24h a partir de agora.
+  // Regra de alternativas:
+  // (a) Considerar apenas saídas em que a chegada (ETA) ocorra entre o nascer (sunrise) e o pôr do sol (sunset) reais do destino.
+  // (b) Janela inicial de busca: próximas 24h a partir de agora (America/Sao_Paulo).
+  // (c) Se não houver nenhuma saída válida dentro das próximas 24 h, estender a busca para o dia seguinte, até no máximo 24 h à frente (ou seja, até +48 h contadas a partir de agora em America/Sao_Paulo).
+  // (d) A hora original de saída continua excluída da varredura.
+  // (e) O veredito completo (vento de proa, onda de través, chegada noturna) continua sendo aplicado a cada candidata.
+  // (f) Só sugerir alternativa se for ESTRITAMENTE MELHOR que a travessia original.
+
   const currentNowMs = Date.now()
-  // Próxima hora cheia calculada em America/Sao_Paulo
-  // Horário local em ms (UTC + offset -03:00)
+  // Próxima hora cheia calculada em America/Sao_Paulo (-03:00)
   const localNowMs = currentNowMs + SAO_PAULO_OFFSET_MINUTES * 60 * 1000
   const localDate = new Date(localNowMs)
   const localMinutes = localDate.getUTCMinutes()
@@ -872,21 +875,49 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   // Se já está exatamente no minuto 0 segundo 0, soma 1 hora para ser estritamente posterior
   const msToNextHour = localMsRemaining <= 0 ? 3600 * 1000 : localMsRemaining
   const firstCandidateMs = currentNowMs + msToNextHour
-  const maxSearchHorizonMs = currentNowMs + 24 * 3600 * 1000
+  const window24hMs = currentNowMs + 24 * 3600 * 1000
+  const maxSearchHorizonMs = currentNowMs + 48 * 3600 * 1000
 
-  for (let candMs = firstCandidateMs; candMs <= maxSearchHorizonMs; candMs += 3600 * 1000) {
-    // Pula se coincidir exatamente com a saída original (em ms ou ISO)
-    if (Math.abs(candMs - horaSaidaMs) < 60000) {
-      continue
+  // Helper para testar um candidato de saída e retornar se atende à janela de luz e seu veredito
+  const avaliarCandidato = (candSaidaMs) => {
+    // Pula se coincidir com a saída original (dentro de 1 minuto)
+    if (Math.abs(candSaidaMs - horaSaidaMs) < 60000) {
+      return null
     }
 
-    const candSaidaMs = candMs
     const candMeioMs = candSaidaMs + duracaoMs / 2
     const candEtaMs = candSaidaMs + duracaoMs
 
     const candSaidaIso = formatIsoSaoPaulo(candSaidaMs)
     const candMeioIso = formatIsoSaoPaulo(candMeioMs)
     const candEtaIso = formatIsoSaoPaulo(candEtaMs)
+
+    // Obter nascer e pôr do sol no destino para o dia da chegada (candEtaDate)
+    const candEtaDate = candEtaIso.slice(0, 10)
+    let candSunriseStr = null
+    let candSunsetStr = null
+    for (let k = 0; k < dList.length; k++) {
+      if (dList[k].date === candEtaDate) {
+        candSunriseStr = dList[k].sunrise
+        candSunsetStr = dList[k].sunset
+        break
+      }
+    }
+
+    // Se não houver dia específico, fallback para o primeiro dia disponível
+    if ((!candSunriseStr || !candSunsetStr) && dList.length > 0) {
+      candSunriseStr = candSunriseStr || dList[0].sunrise
+      candSunsetStr = candSunsetStr || dList[0].sunset
+    }
+
+    // Checagem de luz solar: ETA deve ocorrer entre o nascer e o pôr do sol reais do destino
+    if (candSunriseStr && candSunsetStr) {
+      const candSunriseMs = parseDateSaoPaulo(candSunriseStr)
+      const candSunsetMs = parseDateSaoPaulo(candSunsetStr)
+      if (candEtaMs < candSunriseMs || candEtaMs > candSunsetMs) {
+        return null // Descartado: chegada fora do período diurno (antes do nascer ou após o pôr do sol)
+      }
+    }
 
     const candHOrigem = findHourlyAt(prevOrigem.hourly, candSaidaIso)
     const candHMeio = findHourlyAt(prevMeio.hourly, candMeioIso)
@@ -897,35 +928,54 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const a3 = calcAmostra('destino', pontoDestino, candEtaIso, candHDestino)
     const candAmostras = [a1, a2, a3]
 
-    // Checa pôr do sol para a candidata
-    const candEtaDate = candEtaIso.slice(0, 10)
-    let candSunset = null
-    for (let k = 0; k < dList.length; k++) {
-      if (dList[k].date === candEtaDate) {
-        candSunset = dList[k].sunset
-        break
-      }
-    }
-    const candNoite = candSunset ? candEtaMs > parseDateSaoPaulo(candSunset) : false
+    // candNoite é false porque já validamos candEtaMs <= candSunsetMs e >= candSunriseMs
+    const candNoite = false
 
     // Calcula veredito completo do candidato com as MESMAS regras da travessia principal
     const candVereditoObj = calcularVereditoCompleto(candAmostras, candNoite)
     const candRankVal = rankVeredito(candVereditoObj.veredito)
     const candMinScoreVal = candVereditoObj.minScore
 
-    if (isEstritamenteMelhor(candRankVal, candMinScoreVal, bestRank, bestMinScore)) {
-      bestRank = candRankVal
-      bestMinScore = candMinScoreVal
-      bestCandidate = {
-        hora_saida: candSaidaIso,
-        eta: candEtaIso,
-        veredito: candVereditoObj.veredito,
-        veredito_cor: candVereditoObj.vereditoCor,
-        score_minimo: candMinScoreVal,
-        fator_limitante: candVereditoObj.fatorLimitante,
-        aviso: candVereditoObj.aviso,
-        alertas: candVereditoObj.alertas,
-        alertas_consolidados: candVereditoObj.alertas_consolidados,
+    return {
+      hora_saida: candSaidaIso,
+      eta: candEtaIso,
+      veredito: candVereditoObj.veredito,
+      veredito_cor: candVereditoObj.vereditoCor,
+      score_minimo: candMinScoreVal,
+      fator_limitante: candVereditoObj.fatorLimitante,
+      aviso: candVereditoObj.aviso,
+      alertas: candVereditoObj.alertas,
+      alertas_consolidados: candVereditoObj.alertas_consolidados,
+      rank: candRankVal,
+    }
+  }
+
+  // 1ª Etapa: varredura nas primeiras 24 horas a partir de agora
+  let candidatosValidos24hCount = 0
+  for (let candMs = firstCandidateMs; candMs <= window24hMs; candMs += 3600 * 1000) {
+    const candObj = avaliarCandidato(candMs)
+    if (candObj) {
+      candidatosValidos24hCount++
+      if (isEstritamenteMelhor(candObj.rank, candObj.score_minimo, bestRank, bestMinScore)) {
+        bestRank = candObj.rank
+        bestMinScore = candObj.score_minimo
+        bestCandidate = candObj
+      }
+    }
+  }
+
+  // 2ª Etapa: Se não houver nenhuma saída válida (com ETA entre nascer e pôr do sol) dentro das próximas 24h,
+  // estende a busca para o dia seguinte, até no máximo 24h à frente (ou seja, até maxSearchHorizonMs = agora + 48h).
+  if (candidatosValidos24hCount === 0) {
+    const startNextDayMs = window24hMs + 3600 * 1000
+    for (let candMs = startNextDayMs; candMs <= maxSearchHorizonMs; candMs += 3600 * 1000) {
+      const candObj = avaliarCandidato(candMs)
+      if (candObj) {
+        if (isEstritamenteMelhor(candObj.rank, candObj.score_minimo, bestRank, bestMinScore)) {
+          bestRank = candObj.rank
+          bestMinScore = candObj.score_minimo
+          bestCandidate = candObj
+        }
       }
     }
   }
