@@ -74,12 +74,14 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
   }
 
   // 4. Consulta endpoints do Open-Meteo com forecast_days=3 (72 horas)
+  // Inclui daily=sunrise,sunset para detecção diurna precisa de janelas
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility' +
+    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index' +
+    '&daily=sunrise,sunset,daylight_duration' +
     '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=3'
 
   const marineUrl =
@@ -87,7 +89,7 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wave_height,wave_period,sea_level_height_msl' +
+    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
     '&timezone=America%2FSao_Paulo&forecast_days=3'
 
   let weatherRes
@@ -137,6 +139,38 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     return e.json(502, { error: 'Dados meteorológicos inválidos ou incompletos' })
   }
 
+  // Mapeamento diário de sunrise e sunset por data (YYYY-MM-DD)
+  const sunMap = {}
+  if (weatherData.daily && weatherData.daily.time) {
+    const dTimes = weatherData.daily.time
+    const dSunrises = weatherData.daily.sunrise || []
+    const dSunsets = weatherData.daily.sunset || []
+    for (let i = 0; i < dTimes.length; i++) {
+      const dayKey = dTimes[i]
+      sunMap[dayKey] = {
+        sunrise: dSunrises[i] ? new Date(dSunrises[i]).getTime() : null,
+        sunset: dSunsets[i] ? new Date(dSunsets[i]).getTime() : null,
+      }
+    }
+  }
+
+  // Helper para verificar se um timestamp de hora cai no período diurno (entre sunrise e sunset)
+  const isDaylightHour = (timeIso) => {
+    const hourTime = new Date(timeIso).getTime()
+    const dayKey = timeIso.slice(0, 10)
+    const daySun = sunMap[dayKey]
+    if (daySun && daySun.sunrise && daySun.sunset) {
+      // Considera a hora diurna se o horário estiver entre o nascer e o pôr do sol
+      // Permitimos uma tolerância de 30 minutos em torno do sunrise/sunset
+      return (
+        hourTime >= daySun.sunrise - 30 * 60 * 1000 && hourTime <= daySun.sunset + 30 * 60 * 1000
+      )
+    }
+    // Fallback padrão se não houver daily: entre 06:00 e 18:00
+    const hour = new Date(timeIso).getHours()
+    return hour >= 6 && hour < 18
+  }
+
   // Map de dados marítimos por hora (time)
   const marineMap = {}
   if (marineData && marineData.hourly && marineData.hourly.time) {
@@ -144,6 +178,12 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     const mWaveHeight = marineData.hourly.wave_height || []
     const mWavePeriod = marineData.hourly.wave_period || []
     const mSeaLevel = marineData.hourly.sea_level_height_msl || []
+    const mSeaSurfaceTemp = marineData.hourly.sea_surface_temperature || []
+    const mSwellWaveDir = marineData.hourly.swell_wave_direction || []
+    const mSwellWavePeriod = marineData.hourly.swell_wave_period || []
+    const mWindWaveHeight = marineData.hourly.wind_wave_height || []
+    const mOceanCurrentVel = marineData.hourly.ocean_current_velocity || []
+    const mOceanCurrentDir = marineData.hourly.ocean_current_direction || []
 
     for (let i = 0; i < mTimes.length; i++) {
       const t = mTimes[i]
@@ -151,6 +191,12 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
         wave_height: mWaveHeight[i] !== undefined ? mWaveHeight[i] : null,
         wave_period: mWavePeriod[i] !== undefined ? mWavePeriod[i] : null,
         sea_level_height_msl: mSeaLevel[i] !== undefined ? mSeaLevel[i] : null,
+        sea_surface_temperature: mSeaSurfaceTemp[i] !== undefined ? mSeaSurfaceTemp[i] : null,
+        swell_wave_direction: mSwellWaveDir[i] !== undefined ? mSwellWaveDir[i] : null,
+        swell_wave_period: mSwellWavePeriod[i] !== undefined ? mSwellWavePeriod[i] : null,
+        wind_wave_height: mWindWaveHeight[i] !== undefined ? mWindWaveHeight[i] : null,
+        ocean_current_velocity: mOceanCurrentVel[i] !== undefined ? mOceanCurrentVel[i] : null,
+        ocean_current_direction: mOceanCurrentDir[i] !== undefined ? mOceanCurrentDir[i] : null,
       }
     }
   }
@@ -162,6 +208,10 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
   const wWindGusts = weatherData.hourly.wind_gusts_10m || []
   const wPrecipitation = weatherData.hourly.precipitation || []
   const wVisibility = weatherData.hourly.visibility || []
+  const wTemp = weatherData.hourly.temperature_2m || []
+  const wPressure = weatherData.hourly.surface_pressure || []
+  const wCloudCover = weatherData.hourly.cloud_cover || []
+  const wUvIndex = weatherData.hourly.uv_index || []
 
   // Dedução de exposição: abrigado = 0, semi = -10, aberto = -20
   let exposicaoDeducao = 0
@@ -179,6 +229,12 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       wave_height: null,
       wave_period: null,
       sea_level_height_msl: null,
+      sea_surface_temperature: null,
+      swell_wave_direction: null,
+      swell_wave_period: null,
+      wind_wave_height: null,
+      ocean_current_velocity: null,
+      ocean_current_direction: null,
     }
 
     const windSpeed = wWindSpeed[i] !== undefined ? wWindSpeed[i] : null
@@ -307,124 +363,91 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       wind_gusts_10m: windGusts,
       precipitation: precipitation,
       visibility: visibility,
+      temperature_2m: wTemp[i] !== undefined ? wTemp[i] : null,
+      surface_pressure: wPressure[i] !== undefined ? wPressure[i] : null,
+      cloud_cover: wCloudCover[i] !== undefined ? wCloudCover[i] : null,
+      uv_index: wUvIndex[i] !== undefined ? wUvIndex[i] : null,
       wave_height: waveHeight,
       wave_period: wavePeriod,
       sea_level_height_msl: seaLevel,
+      sea_surface_temperature: mData.sea_surface_temperature,
+      swell_wave_direction: mData.swell_wave_direction,
+      swell_wave_period: mData.swell_wave_period,
+      wind_wave_height: mData.wind_wave_height,
+      ocean_current_velocity: mData.ocean_current_velocity,
+      ocean_current_direction: mData.ocean_current_direction,
     })
   }
 
   // 5. Detecção de janelas ideais
-  // Bloco contíguo de horas onde TODAS as horas têm score >= 70.
+  // Restrita ao período diurno de cada dia (de nascer do sol a pôr do sol)
+  // Bloco contíguo de horas onde TODAS as horas têm score >= 70 e caem no período diurno.
   // Duração mínima = 3 horas consecutivas.
-  // Retorne apenas janelas dos próximos 3 dias (a partir de agora).
   const janelas = []
   let currentJanela = []
 
-  // Pegamos a data/hora atual no fuso local aproximado
-  const nowTimeIso = new Date().toISOString()
-  // Filtramos os hourlyScores para avaliar a partir da hora atual mais recente ou todas as 72h
+  const finalizeJanela = () => {
+    if (currentJanela.length >= 3) {
+      let somaScores = 0
+      const fatoresCount = {}
+
+      for (let j = 0; j < currentJanela.length; j++) {
+        somaScores += currentJanela[j].score
+        const f = currentJanela[j].fator_limitante
+        if (f) {
+          fatoresCount[f] = (fatoresCount[f] || 0) + 1
+        }
+      }
+
+      let maisFrequente = null
+      let maxCount = 0
+      const fatorKeys = Object.keys(fatoresCount)
+      for (let k = 0; k < fatorKeys.length; k++) {
+        const key = fatorKeys[k]
+        if (fatoresCount[key] > maxCount) {
+          maxCount = fatoresCount[key]
+          maisFrequente = key
+        }
+      }
+
+      let limitanteDesc = null
+      if (maisFrequente) {
+        for (let j = 0; j < currentJanela.length; j++) {
+          if (
+            currentJanela[j].fator_limitante === maisFrequente &&
+            currentJanela[j].fator_limitante_desc
+          ) {
+            limitanteDesc = currentJanela[j].fator_limitante_desc
+            break
+          }
+        }
+      }
+
+      janelas.push({
+        inicio: currentJanela[0].time,
+        fim: currentJanela[currentJanela.length - 1].time,
+        duracao_horas: currentJanela.length,
+        score_medio: Math.round(somaScores / currentJanela.length),
+        fator_limitante: maisFrequente,
+        fator_limitante_desc: limitanteDesc,
+      })
+    }
+    currentJanela = []
+  }
+
   for (let i = 0; i < hourlyScores.length; i++) {
     const item = hourlyScores[i]
-    if (item.score >= 70) {
+    const isDay = isDaylightHour(item.time)
+
+    if (item.score >= 70 && isDay) {
       currentJanela.push(item)
     } else {
-      if (currentJanela.length >= 3) {
-        // Finaliza janela
-        let somaScores = 0
-        const fatoresCount = {}
-
-        for (let j = 0; j < currentJanela.length; j++) {
-          somaScores += currentJanela[j].score
-          const f = currentJanela[j].fator_limitante
-          if (f) {
-            fatoresCount[f] = (fatoresCount[f] || 0) + 1
-          }
-        }
-
-        let maisFrequente = null
-        let maxCount = 0
-        const fatorKeys = Object.keys(fatoresCount)
-        for (let k = 0; k < fatorKeys.length; k++) {
-          const key = fatorKeys[k]
-          if (fatoresCount[key] > maxCount) {
-            maxCount = fatoresCount[key]
-            maisFrequente = key
-          }
-        }
-
-        // Descrição do fator limitante se houver
-        let limitanteDesc = null
-        if (maisFrequente) {
-          for (let j = 0; j < currentJanela.length; j++) {
-            if (
-              currentJanela[j].fator_limitante === maisFrequente &&
-              currentJanela[j].fator_limitante_desc
-            ) {
-              limitanteDesc = currentJanela[j].fator_limitante_desc
-              break
-            }
-          }
-        }
-
-        janelas.push({
-          inicio: currentJanela[0].time,
-          fim: currentJanela[currentJanela.length - 1].time,
-          duracao_horas: currentJanela.length,
-          score_medio: Math.round(somaScores / currentJanela.length),
-          fator_limitante: maisFrequente,
-          fator_limitante_desc: limitanteDesc,
-        })
-      }
-      currentJanela = []
+      finalizeJanela()
     }
   }
 
   // Se terminou o loop com janela aberta >= 3
-  if (currentJanela.length >= 3) {
-    let somaScores = 0
-    const fatoresCount = {}
-
-    for (let j = 0; j < currentJanela.length; j++) {
-      somaScores += currentJanela[j].score
-      const f = currentJanela[j].fator_limitante
-      if (f) {
-        fatoresCount[f] = (fatoresCount[f] || 0) + 1
-      }
-    }
-
-    let maisFrequente = null
-    let maxCount = 0
-    const fatorKeys = Object.keys(fatoresCount)
-    for (let k = 0; k < fatorKeys.length; k++) {
-      const key = fatorKeys[k]
-      if (fatoresCount[key] > maxCount) {
-        maxCount = fatoresCount[key]
-        maisFrequente = key
-      }
-    }
-
-    let limitanteDesc = null
-    if (maisFrequente) {
-      for (let j = 0; j < currentJanela.length; j++) {
-        if (
-          currentJanela[j].fator_limitante === maisFrequente &&
-          currentJanela[j].fator_limitante_desc
-        ) {
-          limitanteDesc = currentJanela[j].fator_limitante_desc
-          break
-        }
-      }
-    }
-
-    janelas.push({
-      inicio: currentJanela[0].time,
-      fim: currentJanela[currentJanela.length - 1].time,
-      duracao_horas: currentJanela.length,
-      score_medio: Math.round(somaScores / currentJanela.length),
-      fator_limitante: maisFrequente,
-      fator_limitante_desc: limitanteDesc,
-    })
-  }
+  finalizeJanela()
 
   const resultPayload = {
     ponto_id: realPontoId,

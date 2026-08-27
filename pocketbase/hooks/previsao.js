@@ -47,21 +47,24 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   }
 
   // 3. Consulta endpoints do Open-Meteo
+  // Forecast: daily=sunrise,sunset,daylight_duration & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility' +
-    '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=1'
+    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index' +
+    '&daily=sunrise,sunset,daylight_duration' +
+    '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=7'
 
+  // Marine: hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction
   const marineUrl =
     'https://marine-api.open-meteo.com/v1/marine?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wave_height,wave_period,sea_level_height_msl' +
-    '&timezone=America%2FSao_Paulo&forecast_days=1'
+    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
+    '&timezone=America%2FSao_Paulo&forecast_days=7'
 
   let weatherRes
   let marineRes
@@ -117,6 +120,12 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     const mWaveHeight = marineData.hourly.wave_height || []
     const mWavePeriod = marineData.hourly.wave_period || []
     const mSeaLevel = marineData.hourly.sea_level_height_msl || []
+    const mSeaSurfaceTemp = marineData.hourly.sea_surface_temperature || []
+    const mSwellWaveDir = marineData.hourly.swell_wave_direction || []
+    const mSwellWavePeriod = marineData.hourly.swell_wave_period || []
+    const mWindWaveHeight = marineData.hourly.wind_wave_height || []
+    const mOceanCurrentVel = marineData.hourly.ocean_current_velocity || []
+    const mOceanCurrentDir = marineData.hourly.ocean_current_direction || []
 
     for (let i = 0; i < mTimes.length; i++) {
       const t = mTimes[i]
@@ -124,8 +133,49 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
         wave_height: mWaveHeight[i] !== undefined ? mWaveHeight[i] : null,
         wave_period: mWavePeriod[i] !== undefined ? mWavePeriod[i] : null,
         sea_level_height_msl: mSeaLevel[i] !== undefined ? mSeaLevel[i] : null,
+        sea_surface_temperature: mSeaSurfaceTemp[i] !== undefined ? mSeaSurfaceTemp[i] : null,
+        swell_wave_direction: mSwellWaveDir[i] !== undefined ? mSwellWaveDir[i] : null,
+        swell_wave_period: mSwellWavePeriod[i] !== undefined ? mSwellWavePeriod[i] : null,
+        wind_wave_height: mWindWaveHeight[i] !== undefined ? mWindWaveHeight[i] : null,
+        ocean_current_velocity: mOceanCurrentVel[i] !== undefined ? mOceanCurrentVel[i] : null,
+        ocean_current_direction: mOceanCurrentDir[i] !== undefined ? mOceanCurrentDir[i] : null,
       }
     }
+  }
+
+  // Helpers de conversão náutica e astronômica definidos inline
+  const getBeaufort = (windKt) => {
+    if (windKt === null || windKt === undefined || isNaN(windKt)) return 0
+    const w = Number(windKt)
+    if (w < 1) return 0
+    if (w <= 3) return 1
+    if (w <= 6) return 2
+    if (w <= 10) return 3
+    if (w <= 16) return 4
+    if (w <= 21) return 5
+    if (w <= 27) return 6
+    if (w <= 33) return 7
+    if (w <= 40) return 8
+    if (w <= 47) return 9
+    if (w <= 55) return 10
+    if (w <= 63) return 11
+    return 12
+  }
+
+  const getDouglas = (waveM) => {
+    if (waveM === null || waveM === undefined || isNaN(waveM))
+      return { grau: 0, descricao: 'Calmo (espelhado)' }
+    const h = Number(waveM)
+    if (h === 0) return { grau: 0, descricao: 'Calmo (espelhado)' }
+    if (h <= 0.1) return { grau: 1, descricao: 'Calmo (ondulado)' }
+    if (h <= 0.5) return { grau: 2, descricao: 'Cavado suave' }
+    if (h <= 1.25) return { grau: 3, descricao: 'Levemente cavado' }
+    if (h <= 2.5) return { grau: 4, descricao: 'Moderado' }
+    if (h <= 4.0) return { grau: 5, descricao: 'Grosso' }
+    if (h <= 6.0) return { grau: 6, descricao: 'Muito grosso' }
+    if (h <= 9.0) return { grau: 7, descricao: 'Alto' }
+    if (h <= 14.0) return { grau: 8, descricao: 'Muito alto' }
+    return { grau: 9, descricao: 'Fenomenal' }
   }
 
   // Une os dois JSONs pelo campo time
@@ -135,6 +185,10 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   const wWindGusts = weatherData.hourly.wind_gusts_10m || []
   const wPrecipitation = weatherData.hourly.precipitation || []
   const wVisibility = weatherData.hourly.visibility || []
+  const wTemp = weatherData.hourly.temperature_2m || []
+  const wPressure = weatherData.hourly.surface_pressure || []
+  const wCloudCover = weatherData.hourly.cloud_cover || []
+  const wUvIndex = weatherData.hourly.uv_index || []
 
   const mergedHourly = []
 
@@ -144,19 +198,384 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       wave_height: null,
       wave_period: null,
       sea_level_height_msl: null,
+      sea_surface_temperature: null,
+      swell_wave_direction: null,
+      swell_wave_period: null,
+      wind_wave_height: null,
+      ocean_current_velocity: null,
+      ocean_current_direction: null,
     }
+
+    const windSpd = wWindSpeed[i] !== undefined ? wWindSpeed[i] : null
+    const waveH = mData.wave_height
 
     mergedHourly.push({
       time: t,
-      wind_speed_10m: wWindSpeed[i] !== undefined ? wWindSpeed[i] : null,
+      wind_speed_10m: windSpd,
       wind_direction_10m: wWindDir[i] !== undefined ? wWindDir[i] : null,
       wind_gusts_10m: wWindGusts[i] !== undefined ? wWindGusts[i] : null,
+      beaufort: windSpd !== null ? getBeaufort(windSpd) : 0,
       precipitation: wPrecipitation[i] !== undefined ? wPrecipitation[i] : null,
       visibility: wVisibility[i] !== undefined ? wVisibility[i] : null,
-      wave_height: mData.wave_height,
+      temperature_2m: wTemp[i] !== undefined ? wTemp[i] : null,
+      surface_pressure: wPressure[i] !== undefined ? wPressure[i] : null,
+      cloud_cover: wCloudCover[i] !== undefined ? wCloudCover[i] : null,
+      uv_index: wUvIndex[i] !== undefined ? wUvIndex[i] : null,
+      wave_height: waveH,
       wave_period: mData.wave_period,
+      douglas_grau: waveH !== null ? getDouglas(waveH).grau : 0,
       sea_level_height_msl: mData.sea_level_height_msl,
+      sea_surface_temperature: mData.sea_surface_temperature,
+      swell_wave_direction: mData.swell_wave_direction,
+      swell_wave_period: mData.swell_wave_period,
+      wind_wave_height: mData.wind_wave_height,
+      ocean_current_velocity: mData.ocean_current_velocity,
+      ocean_current_direction: mData.ocean_current_direction,
     })
+  }
+
+  // Cálculo da hora atual para métricas de tempo real (pressão, astronomia, mar atual)
+  const now = new Date()
+  const nowMs = now.getTime()
+  let currentIdx = 0
+  let minDiff = Infinity
+  for (let i = 0; i < mergedHourly.length; i++) {
+    const itemTime = new Date(mergedHourly[i].time).getTime()
+    const diff = Math.abs(itemTime - nowMs)
+    if (diff < minDiff) {
+      minDiff = diff
+      currentIdx = i
+    }
+  }
+
+  const currentItem = mergedHourly[currentIdx] || mergedHourly[0] || {}
+
+  // 1. Tendência de Pressão: diferença em hPa entre atual e 3 horas atrás
+  let pressaoAtual = currentItem.surface_pressure
+  if (pressaoAtual === null || pressaoAtual === undefined) {
+    for (let i = currentIdx; i >= 0; i--) {
+      if (
+        mergedHourly[i].surface_pressure !== null &&
+        mergedHourly[i].surface_pressure !== undefined
+      ) {
+        pressaoAtual = mergedHourly[i].surface_pressure
+        break
+      }
+    }
+  }
+
+  let pressao3hAtras = null
+  const idx3h = currentIdx - 3
+  if (idx3h >= 0 && mergedHourly[idx3h] && mergedHourly[idx3h].surface_pressure !== null) {
+    pressao3hAtras = mergedHourly[idx3h].surface_pressure
+  } else {
+    // Procura a mais próxima de 3h antes
+    for (let i = Math.max(0, currentIdx - 3); i >= 0; i--) {
+      if (mergedHourly[i].surface_pressure !== null) {
+        pressao3hAtras = mergedHourly[i].surface_pressure
+        break
+      }
+    }
+  }
+
+  let tendenciaPressaoValor = 0
+  let tendenciaPressaoDirecao = 'estável'
+
+  if (pressaoAtual !== null && pressao3hAtras !== null) {
+    tendenciaPressaoValor = Math.round((pressaoAtual - pressao3hAtras) * 10) / 10
+    if (tendenciaPressaoValor > 0.5) {
+      tendenciaPressaoDirecao = 'subindo'
+    } else if (tendenciaPressaoValor < -0.5) {
+      tendenciaPressaoDirecao = 'descendo'
+    } else {
+      tendenciaPressaoDirecao = 'estável'
+    }
+  }
+
+  const pressaoTendencia = {
+    atual_hpa: pressaoAtual !== null ? Math.round(pressaoAtual * 10) / 10 : null,
+    delta_3h_hpa: tendenciaPressaoValor,
+    direcao: tendenciaPressaoDirecao,
+    queda_severa: tendenciaPressaoValor <= -3.0,
+  }
+
+  // 2. Beaufort e Douglas atuais
+  const currentBeaufort =
+    currentItem.wind_speed_10m !== null ? getBeaufort(currentItem.wind_speed_10m) : 0
+  const currentDouglas =
+    currentItem.wave_height !== null
+      ? getDouglas(currentItem.wave_height)
+      : { grau: 0, descricao: 'Calmo (espelhado)' }
+
+  // 3. Fase e iluminação da Lua (Jean Meeus / Astronomical Algorithms)
+  const getMoonData = (date) => {
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth() + 1
+    const day = date.getUTCDate() + (date.getUTCHours() + date.getUTCMinutes() / 60) / 24
+
+    let y = year
+    let m = month
+    if (m <= 2) {
+      y -= 1
+      m += 12
+    }
+    const a = Math.floor(y / 100)
+    const b = 2 - a + Math.floor(a / 4)
+    const jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524.5
+
+    // T = séculos julianos desde J2000.0 (JD 2451545.0)
+    const T = (jd - 2451545.0) / 36525.0
+
+    // Elongação média da Lua D (graus)
+    let D =
+      297.8501921 +
+      445267.1114034 * T -
+      0.0018819 * T * T +
+      (T * T * T) / 545868.0 -
+      (T * T * T * T) / 113065000.0
+    // Anomalia média do Sol M (graus)
+    let M = 357.5291092 + 35999.0502909 * T - 0.0001536 * T * T + (T * T * T) / 24490000.0
+    // Anomalia média da Lua M' (graus)
+    let Mprime =
+      134.9633964 +
+      477198.8675055 * T +
+      0.0087414 * T * T +
+      (T * T * T) / 69699.0 -
+      (T * T * T * T) / 14712000.0
+
+    const deg2rad = Math.PI / 180.0
+    // Ângulo de fase astronômico i
+    let phaseAngleDeg =
+      180 -
+      D -
+      6.289 * Math.sin(Mprime * deg2rad) +
+      2.1 * Math.sin(M * deg2rad) -
+      1.274 * Math.sin((2 * D - Mprime) * deg2rad) -
+      0.658 * Math.sin(2 * D * deg2rad) -
+      0.214 * Math.sin(2 * Mprime * deg2rad) -
+      0.11 * Math.sin(D * deg2rad)
+
+    // Normalizar D entre 0 e 360
+    D = ((D % 360) + 360) % 360
+    const phaseValue = D / 360.0 // 0 a 1 (0 = Nova, 0.5 = Cheia)
+
+    // Fração iluminada k = (1 + cos(i)) / 2
+    let iRad = phaseAngleDeg * deg2rad
+    let fraction = (1 + Math.cos(iRad)) / 2.0
+    let illuminationPct = Math.round(fraction * 100)
+    if (illuminationPct < 0) illuminationPct = 0
+    if (illuminationPct > 100) illuminationPct = 100
+
+    let nomeFase = 'Nova'
+    let icone = '🌑'
+
+    if (phaseValue >= 0.97 || phaseValue < 0.03) {
+      nomeFase = 'Nova'
+      icone = '🌑'
+    } else if (phaseValue >= 0.03 && phaseValue < 0.22) {
+      nomeFase = 'Crescente'
+      icone = '🌒'
+    } else if (phaseValue >= 0.22 && phaseValue < 0.28) {
+      nomeFase = 'Quarto Crescente'
+      icone = '🌓'
+    } else if (phaseValue >= 0.28 && phaseValue < 0.47) {
+      nomeFase = 'Gibosa Crescente'
+      icone = '🌔'
+    } else if (phaseValue >= 0.47 && phaseValue < 0.53) {
+      nomeFase = 'Cheia'
+      icone = '🌕'
+    } else if (phaseValue >= 0.53 && phaseValue < 0.72) {
+      nomeFase = 'Gibosa Minguante'
+      icone = '🌖'
+    } else if (phaseValue >= 0.72 && phaseValue < 0.78) {
+      nomeFase = 'Quarto Minguante'
+      icone = '🌗'
+    } else {
+      nomeFase = 'Minguante'
+      icone = '🌘'
+    }
+
+    return {
+      fase: Math.round(phaseValue * 1000) / 1000,
+      iluminacao_porcentagem: illuminationPct,
+      nome_fase: nomeFase,
+      icone: icone,
+    }
+  }
+
+  const moonData = getMoonData(now)
+
+  // 4. Crepúsculo Náutico matutino e vespertino (sol 12° abaixo do horizonte -> zenith = 102°)
+  const getNauticalTwilight = (date, latitude, longitude) => {
+    // Algoritmo solar NOAA / Meeus para sol no zênite de 102 graus
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+
+    const rad = Math.PI / 180.0
+    const deg = 180.0 / Math.PI
+
+    // Dia do ano N
+    const N1 = Math.floor((275 * month) / 9)
+    const N2 = Math.floor((month + 9) / 12)
+    const N3 = 1 + Math.floor((year - 4 * Math.floor(year / 4) + 2) / 3)
+    const N = N1 - N2 * N3 + day - 30
+
+    // Longitude para horas
+    const lngHour = longitude / 15.0
+
+    const calcTime = (isMorning) => {
+      const t = isMorning ? N + (6.0 - lngHour) / 24.0 : N + (18.0 - lngHour) / 24.0
+      const M = 0.9856 * t - 3.289
+      let L = M + 1.916 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 282.634
+      L = ((L % 360) + 360) % 360
+
+      let RA = deg * Math.atan(0.91764 * Math.tan(L * rad))
+      RA = ((RA % 360) + 360) % 360
+
+      const Lquadrant = Math.floor(L / 90) * 90
+      const RAquadrant = Math.floor(RA / 90) * 90
+      RA = RA + (Lquadrant - RAquadrant)
+      RA = RA / 15.0 // horas
+
+      const sinDec = 0.39782 * Math.sin(L * rad)
+      const cosDec = Math.cos(Math.asin(sinDec))
+
+      const zenith = 102.0 // Náutico (12 graus abaixo)
+      const cosH =
+        (Math.cos(zenith * rad) - sinDec * Math.sin(latitude * rad)) /
+        (cosDec * Math.cos(latitude * rad))
+
+      if (cosH > 1 || cosH < -1) return null // Sem crepúsculo (sol da meia noite ou noite polar)
+
+      let H
+      if (isMorning) {
+        H = 360.0 - deg * Math.acos(cosH)
+      } else {
+        H = deg * Math.acos(cosH)
+      }
+      H = H / 15.0
+
+      const T = H + RA - 0.06571 * t - 6.622
+      let UT = T - lngHour
+      UT = ((UT % 24) + 24) % 24
+
+      const localHours = UT - 3.0 // Horário de Brasília UTC-3
+      const adjustedHours = ((localHours % 24) + 24) % 24
+
+      const h = Math.floor(adjustedHours)
+      const min = Math.floor((adjustedHours - h) * 60)
+
+      const yStr = String(year)
+      const mStr = String(month).padStart(2, '0')
+      const dStr = String(day).padStart(2, '0')
+      const hStr = String(h).padStart(2, '0')
+      const minStr = String(min).padStart(2, '0')
+
+      return `${yStr}-${mStr}-${dStr}T${hStr}:${minStr}:00-03:00`
+    }
+
+    return {
+      crepusculo_nautico_matutino: calcTime(true),
+      crepusculo_nautico_vespertino: calcTime(false),
+    }
+  }
+
+  const twilight = getNauticalTwilight(now, lat, lon)
+
+  // 5. Distância e rumo verdadeiro para os outros 3 pontos
+  const PONTOS_CANONICOS = [
+    { slug: 'angra', nome: 'Angra dos Reis', lat: -23.0067, lon: -44.318 },
+    { slug: 'abraao', nome: 'Abraão (Ilha Grande)', lat: -23.1415, lon: -44.1676 },
+    { slug: 'paraty', nome: 'Paraty', lat: -23.2178, lon: -44.7131 },
+    { slug: 'juatinga', nome: 'Juatinga', lat: -23.2833, lon: -44.5833 },
+  ]
+
+  const getCardinalLabel = (deg) => {
+    const dirs = [
+      'N',
+      'NNE',
+      'NE',
+      'ENE',
+      'E',
+      'ESE',
+      'SE',
+      'SSE',
+      'S',
+      'SSW',
+      'SW',
+      'WSW',
+      'W',
+      'WNW',
+      'NW',
+      'NNW',
+    ]
+    const idx = Math.round((((deg % 360) + 360) % 360) / 22.5) % 16
+    return dirs[idx]
+  }
+
+  const rotas = []
+  const rad = Math.PI / 180.0
+  const deg = 180.0 / Math.PI
+
+  for (let i = 0; i < PONTOS_CANONICOS.length; i++) {
+    const pTarget = PONTOS_CANONICOS[i]
+    // Se for o mesmo ponto (distância ~0), pula
+    const dLat = (pTarget.lat - lat) * rad
+    const dLon = (pTarget.lon - lon) * rad
+    const lat1 = lat * rad
+    const lat2 = pTarget.lat * rad
+
+    // Haversine
+    const aH =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const cVal = 2 * Math.atan2(Math.sqrt(aH), Math.sqrt(1 - aH))
+    const distKm = 6371 * cVal
+    const distNm = distKm * 0.539957 // km para milhas náuticas
+
+    if (distNm < 0.3) {
+      continue // é o próprio ponto
+    }
+
+    // Rumo verdadeiro (bearing inicial)
+    const yB = Math.sin(dLon) * Math.cos(lat2)
+    const xB = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+    let bearingDeg = deg * Math.atan2(yB, xB)
+    bearingDeg = ((bearingDeg % 360) + 360) % 360
+
+    rotas.push({
+      ponto_slug: pTarget.slug,
+      ponto_nome: pTarget.nome,
+      lat: pTarget.lat,
+      lon: pTarget.lon,
+      distancia_nm: Math.round(distNm * 10) / 10,
+      rumo_graus: Math.round(bearingDeg),
+      direcao_cardinal: getCardinalLabel(bearingDeg),
+    })
+  }
+
+  // Daily astronomia do Open-Meteo
+  const dailyData = weatherData.daily || {}
+  const dailySunrise = dailyData.sunrise || []
+  const dailySunset = dailyData.sunset || []
+  const dailyDaylight = dailyData.daylight_duration || []
+  const dailyTimes = dailyData.time || []
+
+  const dailyList = []
+  for (let i = 0; i < dailyTimes.length; i++) {
+    dailyList.push({
+      date: dailyTimes[i],
+      sunrise: dailySunrise[i] || null,
+      sunset: dailySunset[i] || null,
+      daylight_duration: dailyDaylight[i] || null,
+    })
+  }
+
+  const todayDaily = dailyList[0] || {
+    sunrise: dailySunrise[0] || null,
+    sunset: dailySunset[0] || null,
+    daylight_duration: dailyDaylight[0] || null,
   }
 
   const resultPayload = {
@@ -167,6 +586,28 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     lon: lon,
     timezone: weatherData.timezone || 'America/Sao_Paulo',
     hourly: mergedHourly,
+    daily: dailyList,
+    astronomia: {
+      nascer_do_sol: todayDaily.sunrise,
+      por_do_sol: todayDaily.sunset,
+      duracao_luz_segundos: todayDaily.daylight_duration,
+      crepusculo_nautico_matutino: twilight.crepusculo_nautico_matutino,
+      crepusculo_nautico_vespertino: twilight.crepusculo_nautico_vespertino,
+      lua: moonData,
+    },
+    pressao_tendencia: pressaoTendencia,
+    mar_atual: {
+      temperatura_agua: currentItem.sea_surface_temperature,
+      swell_direcao: currentItem.swell_wave_direction,
+      swell_periodo: currentItem.swell_wave_period,
+      onda_vento_altura: currentItem.wind_wave_height,
+      corrente_velocidade: currentItem.ocean_current_velocity,
+      corrente_direcao: currentItem.ocean_current_direction,
+      douglas_grau: currentDouglas.grau,
+      douglas_descricao: currentDouglas.descricao,
+      beaufort: currentBeaufort,
+    },
+    rotas: rotas,
   }
 
   // 4. Salva no cache_previsao

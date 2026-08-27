@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,9 @@ import {
   formatTipoPonto,
   getWindDirectionLabel,
   formatarJanelaBadge,
+  getBeaufortScale,
+  formatCoordinatesDMM,
+  formatTimeHHMM,
 } from '@/services/previsaoService'
 import {
   Navigation2,
@@ -21,8 +24,18 @@ import {
   Gauge,
   ChevronRight,
   CalendarCheck,
+  Sunrise,
+  Sunset,
+  Thermometer,
+  Copy,
+  Check,
+  ArrowUp,
+  ArrowRight,
+  ArrowDown,
+  Droplets,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useToast } from '@/hooks/use-toast'
 
 interface PontoCardProps {
   estado: PontoEstadoPrevisao
@@ -31,10 +44,14 @@ interface PontoCardProps {
 
 export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
   const navigate = useNavigate()
+  const { toast } = useToast()
+  const [copied, setCopied] = useState(false)
+
   const {
     ponto,
     loading,
     error,
+    data,
     currentHourData,
     statusSemaforo,
     currentScore,
@@ -229,6 +246,10 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
     currentHourData.wind_speed_10m !== null
       ? Math.round(currentHourData.wind_speed_10m * 10) / 10
       : null
+  const beaufortValue =
+    currentHourData.beaufort !== undefined
+      ? currentHourData.beaufort
+      : getBeaufortScale(currentHourData.wind_speed_10m)
   const windDirDeg = currentHourData.wind_direction_10m ?? 0
   const windDirLabel = getWindDirectionLabel(currentHourData.wind_direction_10m)
   const windGust =
@@ -252,11 +273,88 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
       ? (Math.round(currentHourData.precipitation * 10) / 10).toFixed(1)
       : '0.0'
 
+  // Novos dados enriquecidos
+  const tempAr =
+    currentHourData.temperature_2m !== null && currentHourData.temperature_2m !== undefined
+      ? Math.round(currentHourData.temperature_2m)
+      : null
+
+  const tempAgua =
+    data?.mar_atual?.temperatura_agua !== null && data?.mar_atual?.temperatura_agua !== undefined
+      ? Math.round(data.mar_atual.temperatura_agua)
+      : currentHourData.sea_surface_temperature !== null &&
+          currentHourData.sea_surface_temperature !== undefined
+        ? Math.round(currentHourData.sea_surface_temperature)
+        : null
+
+  // Pressão atmosférica e tendência
+  const pressaoInfo = data?.pressao_tendencia || {
+    atual_hpa:
+      currentHourData.surface_pressure !== null && currentHourData.surface_pressure !== undefined
+        ? Math.round(currentHourData.surface_pressure)
+        : null,
+    delta_3h_hpa: 0,
+    direcao: 'estável',
+    queda_severa: false,
+  }
+
+  // Sol (nascer e pôr)
+  const sunriseStr = formatTimeHHMM(data?.astronomia?.nascer_do_sol)
+  const sunsetStr = formatTimeHHMM(data?.astronomia?.por_do_sol)
+
+  // Coordenadas DMM
+  const coordsDMM = formatCoordinatesDMM(ponto.lat, ponto.lon)
+
   const arrowRotation = windDirDeg
 
   const handleClickCard = () => {
     const slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
     navigate(`/ponto/${slugDestino}`)
+  }
+
+  const handleCopyCoords = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(coordsDMM)
+    setCopied(true)
+    toast({
+      title: 'Coordenadas copiadas!',
+      description: `${nomeExibicao}: ${coordsDMM}`,
+    })
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Render da Seta e Valor da Pressão
+  const renderPressaoBadge = () => {
+    if (pressaoInfo.atual_hpa === null) return null
+
+    // ↑ verde se subindo, → cinza se estável, ↓ vermelha se queda >= 3 hPa/3h (ou descendo)
+    let arrowIcon = <ArrowRight className="w-3.5 h-3.5 text-zinc-400 inline" />
+    let textColor = 'text-zinc-300'
+    let titleText = `Pressão estável (${pressaoInfo.delta_3h_hpa > 0 ? '+' : ''}${pressaoInfo.delta_3h_hpa} hPa / 3h)`
+
+    if (pressaoInfo.direcao === 'subindo') {
+      arrowIcon = <ArrowUp className="w-3.5 h-3.5 text-emerald-400 inline" />
+      textColor = 'text-emerald-300'
+      titleText = `Pressão subindo (+${pressaoInfo.delta_3h_hpa} hPa / 3h)`
+    } else if (pressaoInfo.queda_severa) {
+      arrowIcon = <ArrowDown className="w-3.5 h-3.5 text-red-400 inline animate-bounce" />
+      textColor = 'text-red-400 font-bold'
+      titleText = `Queda severa de pressão: ${pressaoInfo.delta_3h_hpa} hPa / 3h`
+    } else if (pressaoInfo.direcao === 'descendo') {
+      arrowIcon = <ArrowDown className="w-3.5 h-3.5 text-amber-400 inline" />
+      textColor = 'text-amber-300'
+      titleText = `Pressão descendo (${pressaoInfo.delta_3h_hpa} hPa / 3h)`
+    }
+
+    return (
+      <span
+        className={`inline-flex items-center gap-1 font-mono text-[11px] ${textColor}`}
+        title={titleText}
+      >
+        <span>{pressaoInfo.atual_hpa} hPa</span>
+        {arrowIcon}
+      </span>
+    )
   }
 
   return (
@@ -352,8 +450,8 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
         </CardHeader>
 
         {/* Grid de Métricas Principais */}
-        <CardContent className="pt-3 pb-3 space-y-2.5">
-          {/* Bloco 1: Vento e Rajada */}
+        <CardContent className="pt-3 pb-2.5 space-y-2.5">
+          {/* Bloco 1: Vento e Rajada (com Beaufort Fx) */}
           <div className="grid grid-cols-2 gap-2.5">
             {/* Card Vento */}
             <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
@@ -368,11 +466,18 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
                 </span>
               </div>
               <div className="mt-2 flex items-baseline justify-between">
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-baseline gap-1.5">
                   <span className="text-2xl font-black text-white tracking-tight">
                     {windSpeed !== null ? windSpeed : '--'}
                   </span>
                   <span className="text-xs font-semibold text-zinc-400">kt</span>
+                  <Badge
+                    variant="outline"
+                    className="ml-1 bg-sky-950/70 border-sky-800/60 text-sky-300 text-[10px] px-1.5 py-0 font-bold"
+                    title={`Escala Beaufort: Força ${beaufortValue}`}
+                  >
+                    F{beaufortValue}
+                  </Badge>
                 </div>
 
                 {/* Seta de Direção do Vento */}
@@ -465,6 +570,78 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
                 <span className="text-xl font-bold text-white tracking-tight">{precip}</span>
                 <span className="text-xs font-semibold text-zinc-400">mm</span>
               </div>
+            </div>
+          </div>
+
+          {/* LINHA DISCRETA DE ENRIQUECIMENTO NÁUTICO: Sol, Temp Ar/Água, Coordenadas, Pressão */}
+          <div className="mt-2 pt-2 border-t border-zinc-800/80 bg-[#0d1218]/50 rounded-lg p-2 space-y-1.5 text-xs text-zinc-400">
+            {/* Sublinha 1: Sol, Temperaturas e Pressão */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* Sol: Nascer e Pôr */}
+              <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-300">
+                <span className="flex items-center gap-1" title="Nascer do Sol">
+                  <Sunrise className="w-3.5 h-3.5 text-amber-400" />
+                  {sunriseStr}
+                </span>
+                <span className="text-zinc-600">·</span>
+                <span className="flex items-center gap-1" title="Pôr do Sol">
+                  <Sunset className="w-3.5 h-3.5 text-orange-400" />
+                  {sunsetStr}
+                </span>
+              </div>
+
+              {/* Temperaturas: Ar e Água */}
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                {tempAr !== null && (
+                  <span
+                    className="flex items-center gap-0.5 text-zinc-300"
+                    title={`Temperatura do ar: ${tempAr}°C`}
+                  >
+                    <Thermometer className="w-3 h-3 text-orange-300" />
+                    <span>{tempAr}°C ar</span>
+                  </span>
+                )}
+                {tempAgua !== null && (
+                  <>
+                    <span className="text-zinc-600">·</span>
+                    <span
+                      className="flex items-center gap-0.5 text-cyan-300"
+                      title={`Temperatura da água: ${tempAgua}°C`}
+                    >
+                      <Droplets className="w-3 h-3 text-cyan-400" />
+                      <span>{tempAgua}°C mar</span>
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Pressão com Tendência */}
+              <div className="flex items-center">{renderPressaoBadge()}</div>
+            </div>
+
+            {/* Sublinha 2: Coordenadas em DMM com botão de copiar */}
+            <div className="flex items-center justify-between pt-1 border-t border-zinc-800/40 text-[11px]">
+              <span className="text-zinc-500 font-mono flex items-center gap-1">
+                <Compass className="w-3 h-3 text-zinc-500" />
+                {coordsDMM}
+              </span>
+              <button
+                onClick={handleCopyCoords}
+                className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-cyan-300 bg-zinc-800/60 hover:bg-zinc-800 px-1.5 py-0.5 rounded transition-colors"
+                title="Copiar coordenadas em Graus e Minutos Decimais"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400">Copiado</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copiar</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </CardContent>

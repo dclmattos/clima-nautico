@@ -220,6 +220,101 @@ export function formatarJanelaBadge(inicioIso: string, fimIso: string): string {
 }
 
 /**
+ * Converte nós de vento para escala Beaufort (0-12)
+ * 0-1kt=0, 1-3kt=1, 4-6kt=2, 7-10kt=3, 11-16kt=4, 17-21kt=5, 22-27kt=6, 28-33kt=7, 34-40kt=8, 41-47kt=9, 48-55kt=10, 56-63kt=11, 64+kt=12
+ */
+export function getBeaufortScale(windKt: number | null | undefined): number {
+  if (windKt === null || windKt === undefined || isNaN(windKt)) return 0
+  const w = Number(windKt)
+  if (w < 1) return 0
+  if (w <= 3) return 1
+  if (w <= 6) return 2
+  if (w <= 10) return 3
+  if (w <= 16) return 4
+  if (w <= 21) return 5
+  if (w <= 27) return 6
+  if (w <= 33) return 7
+  if (w <= 40) return 8
+  if (w <= 47) return 9
+  if (w <= 55) return 10
+  if (w <= 63) return 11
+  return 12
+}
+
+/**
+ * Converte metros de onda para escala Douglas (0-9)
+ * 0m=0, 0-0.1m=1, 0.1-0.5m=2, 0.5-1.25m=3, 1.25-2.5m=4, 2.5-4m=5, 4-6m=6, 6-9m=7, 9-14m=8, 14+m=9
+ */
+export function getDouglasScale(waveM: number | null | undefined): {
+  grau: number
+  descricao: string
+} {
+  if (waveM === null || waveM === undefined || isNaN(waveM))
+    return { grau: 0, descricao: 'Calmo (espelhado)' }
+  const h = Number(waveM)
+  if (h === 0) return { grau: 0, descricao: 'Calmo (espelhado)' }
+  if (h <= 0.1) return { grau: 1, descricao: 'Calmo (ondulado)' }
+  if (h <= 0.5) return { grau: 2, descricao: 'Cavado suave' }
+  if (h <= 1.25) return { grau: 3, descricao: 'Levemente cavado' }
+  if (h <= 2.5) return { grau: 4, descricao: 'Moderado' }
+  if (h <= 4.0) return { grau: 5, descricao: 'Grosso' }
+  if (h <= 6.0) return { grau: 6, descricao: 'Muito grosso' }
+  if (h <= 9.0) return { grau: 7, descricao: 'Alto' }
+  if (h <= 14.0) return { grau: 8, descricao: 'Muito alto' }
+  return { grau: 9, descricao: 'Fenomenal' }
+}
+
+/**
+ * Formata coordenadas em graus e minutos decimais: 23°00.30'S 044°19.08'W
+ */
+export function formatCoordinatesDMM(lat: number, lon: number): string {
+  const latHemi = lat >= 0 ? 'N' : 'S'
+  const lonHemi = lon >= 0 ? 'E' : 'W'
+
+  const absLat = Math.abs(lat)
+  const latDeg = Math.floor(absLat)
+  const latMin = (absLat - latDeg) * 60
+  const latMinStr = latMin.toFixed(2).padStart(5, '0')
+  const latDegStr = String(latDeg).padStart(2, '0')
+
+  const absLon = Math.abs(lon)
+  const lonDeg = Math.floor(absLon)
+  const lonMin = (absLon - lonDeg) * 60
+  const lonMinStr = lonMin.toFixed(2).padStart(5, '0')
+  const lonDegStr = String(lonDeg).padStart(3, '0')
+
+  return `${latDegStr}°${latMinStr}'${latHemi} ${lonDegStr}°${lonMinStr}'${lonHemi}`
+}
+
+/**
+ * Formata duração em segundos para string legível: "11h 45min"
+ */
+export function formatDaylightDuration(seconds: number | null | undefined): string {
+  if (!seconds || isNaN(seconds)) return '--'
+  const totalMin = Math.round(seconds / 60)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return `${h}h ${String(m).padStart(2, '0')}min`
+}
+
+/**
+ * Formata string ISO para HH:MM
+ */
+export function formatTimeHHMM(isoString: string | null | undefined): string {
+  if (!isoString) return '--:--'
+  try {
+    const d = new Date(isoString)
+    return d.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  } catch {
+    return isoString.slice(11, 16) || '--:--'
+  }
+}
+
+/**
  * Encontra o item de previsão da hora atual mais próximo
  */
 export function getCurrentHourForecast(hourly: PrevisaoHoraItem[]): PrevisaoHoraItem | null {
@@ -302,7 +397,7 @@ export function getWindDirectionLabel(degrees: number | null | undefined): strin
     'NW',
     'NNW',
   ]
-  const index = Math.round((degrees % 360) / 22.5) % 16
+  const index = Math.round((((degrees % 360) + 360) % 360) / 22.5) % 16
   return dirs[index]
 }
 
@@ -313,30 +408,40 @@ export const PONTOS_DISPONIVEIS: Array<{
   slug: string
   nomeCurto: string
   nomeCompleto: string
+  lat: number
+  lon: number
   tipo: 'abrigado' | 'semi' | 'aberto'
 }> = [
   {
     slug: 'angra',
     nomeCurto: 'Angra dos Reis',
     nomeCompleto: 'Angra dos Reis',
+    lat: -23.0067,
+    lon: -44.318,
     tipo: 'abrigado',
   },
   {
     slug: 'abraao',
     nomeCurto: 'Abraão',
     nomeCompleto: 'Vila do Abraão (Ilha Grande)',
+    lat: -23.1415,
+    lon: -44.1676,
     tipo: 'semi',
   },
   {
     slug: 'paraty',
     nomeCurto: 'Paraty',
     nomeCompleto: 'Paraty',
+    lat: -23.2178,
+    lon: -44.7131,
     tipo: 'abrigado',
   },
   {
     slug: 'juatinga',
     nomeCurto: 'Juatinga',
     nomeCompleto: 'Ponta da Juatinga',
+    lat: -23.2833,
+    lon: -44.5833,
     tipo: 'aberto',
   },
 ]
@@ -459,7 +564,9 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
       dataExibicao,
       isHoje,
       ventoMax: maxVento !== null ? Math.round(maxVento * 10) / 10 : null,
+      ventoMaxBeaufort: maxVento !== null ? getBeaufortScale(maxVento) : 0,
       ondaMax: maxOnda !== null ? Math.round(maxOnda * 100) / 100 : null,
+      ondaMaxDouglas: maxOnda !== null ? getDouglasScale(maxOnda).grau : 0,
       chuvaTotal: Math.round(totalChuva * 10) / 10,
     }
   })
