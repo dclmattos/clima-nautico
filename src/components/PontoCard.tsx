@@ -6,32 +6,26 @@ import { PontoEstadoPrevisao } from '@/types/nautico'
 import {
   formatPontoNome,
   formatTipoPonto,
-  getWindDirectionLabel,
-  formatarJanelaBadge,
-  getBeaufortScale,
-  formatCoordinatesDMM,
+  formatDaylightDuration,
   formatTimeHHMM,
+  formatCoordinatesDMM,
+  formatarJanelaBadge,
 } from '@/services/previsaoService'
 import {
-  Navigation2,
   Wind,
-  Waves,
-  CloudRain,
   Compass,
-  AlertTriangle,
-  RotateCw,
+  Waves,
   Clock,
-  Gauge,
+  CloudRain,
+  AlertTriangle,
+  RefreshCw,
   ChevronRight,
-  CalendarCheck,
-  Sunrise,
+  Sun,
   Sunset,
   Thermometer,
+  Gauge,
   Copy,
   Check,
-  ArrowUp,
-  ArrowRight,
-  ArrowDown,
   Droplets,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -59,10 +53,12 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
     loadingJanelas,
     isPersonalizado,
   } = estado
+
   const isCustom =
     isPersonalizado ||
     (ponto as any).isPersonalizado ||
     (ponto.id && ponto.id.startsWith('custom-'))
+
   const nomeExibicao = isCustom ? ponto.nome : formatPontoNome(ponto.nome)
   const tipoFormatado = formatTipoPonto(ponto.tipo)
 
@@ -70,106 +66,76 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
   const getTipoBadgeColor = (tipo: string) => {
     switch (tipo) {
       case 'abrigado':
-        return 'bg-blue-950/70 text-blue-300 border-blue-800/60 hover:bg-blue-950'
+        return 'bg-blue-950/70 text-blue-300 border-blue-800/60'
       case 'semi':
-        return 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950'
+      case 'semi-abrigado':
+        return 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60'
       case 'aberto':
-        return 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-800'
+      case 'mar aberto':
+        return 'bg-slate-800 text-slate-300 border-slate-700'
       default:
-        return 'bg-secondary text-secondary-foreground'
+        return 'bg-zinc-800 text-zinc-300 border-zinc-700'
     }
   }
 
-  // Semáforo com as cores: Verde (#10b981), Amarelo (#f59e0b), Vermelho (#ef4444)
-  const getSemaforoStyle = (status: 'verde' | 'amarelo' | 'vermelho' | null) => {
-    switch (status) {
+  // Cor e texto do semáforo
+  const getSemaforoStyle = () => {
+    switch (statusSemaforo) {
       case 'verde':
         return {
-          bg: 'bg-[#10b981]',
-          glow: 'shadow-[0_0_12px_rgba(16,185,129,0.55)]',
-          border: 'border-[#10b981]/60',
-          text: 'text-[#10b981]',
+          bg: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+          dot: 'bg-emerald-400',
           label: 'Favorável',
+          textColor: 'text-emerald-400',
         }
       case 'amarelo':
         return {
-          bg: 'bg-[#f59e0b]',
-          glow: 'shadow-[0_0_12px_rgba(245,158,11,0.55)]',
-          border: 'border-[#f59e0b]/60',
-          text: 'text-[#f59e0b]',
+          bg: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+          dot: 'bg-amber-400',
           label: 'Atenção',
+          textColor: 'text-amber-400',
         }
       case 'vermelho':
         return {
-          bg: 'bg-[#ef4444]',
-          glow: 'shadow-[0_0_12px_rgba(239,68,68,0.55)]',
-          border: 'border-[#ef4444]/60',
-          text: 'text-[#ef4444]',
-          label: 'Severo',
+          bg: 'bg-red-500/10 border-red-500/30 text-red-400',
+          dot: 'bg-red-400',
+          label: 'Crítico',
+          textColor: 'text-red-400',
         }
       default:
         return {
-          bg: 'bg-zinc-600',
-          glow: '',
-          border: 'border-zinc-500',
-          text: 'text-zinc-400',
-          label: '--',
+          bg: 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400',
+          dot: 'bg-zinc-500',
+          label: 'Sem dados',
+          textColor: 'text-zinc-400',
         }
     }
   }
 
-  // Estilo e anel de progresso SVG do Score 0-100
-  const getScoreVisual = (score: number | null | undefined) => {
-    if (score === null || score === undefined) {
-      return {
-        color: '#71717a', // zinc-500
-        textColor: 'text-zinc-400',
-        strokeColor: '#52525b',
-        bgPill: 'bg-zinc-900 border-zinc-800',
-        label: '--',
-      }
-    }
-    if (score >= 70) {
-      return {
-        color: '#10b981', // green-500
-        textColor: 'text-emerald-400',
-        strokeColor: '#10b981',
-        bgPill: 'bg-emerald-950/40 border-emerald-800/60',
-        label: `${score}`,
-      }
-    }
-    if (score >= 40) {
-      return {
-        color: '#f59e0b', // amber-500
-        textColor: 'text-amber-400',
-        strokeColor: '#f59e0b',
-        bgPill: 'bg-amber-950/40 border-amber-800/60',
-        label: `${score}`,
-      }
-    }
-    return {
-      color: '#ef4444', // red-500
-      textColor: 'text-red-400',
-      strokeColor: '#ef4444',
-      bgPill: 'bg-red-950/40 border-red-800/60',
-      label: `${score}`,
-    }
+  // Cor do anel de score circular
+  const getScoreColorClass = (score: number | null | undefined) => {
+    if (score === null || score === undefined) return 'text-zinc-500'
+    if (score >= 70) return 'text-emerald-400'
+    if (score >= 40) return 'text-amber-400'
+    return 'text-red-400'
   }
 
-  const semaforoInfo = getSemaforoStyle(statusSemaforo)
-  const scoreInfo = getScoreVisual(currentScore)
+  const getScoreStrokeColor = (score: number | null | undefined) => {
+    if (score === null || score === undefined) return '#71717a'
+    if (score >= 70) return '#34d399'
+    if (score >= 40) return '#fbbf24'
+    return '#f87171'
+  }
 
-  // Circunferência do anel circular SVG
-  const radius = 16
-  const strokeWidth = 3.5
-  const circumference = 2 * Math.PI * radius
-  const normalizedScore =
-    currentScore !== null && currentScore !== undefined
-      ? Math.max(0, Math.min(100, currentScore))
-      : 0
-  const strokeDashoffset = circumference - (normalizedScore / 100) * circumference
+  // Direção do vento para texto e rotação
+  const getWindDirectionLabel = (deg: number | null | undefined) => {
+    if (deg === null || deg === undefined) return '--'
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    const idx = Math.round((deg % 360) / 45) % 8
+    return dirs[idx]
+  }
 
-  // Formatação do horário do dado
+  // Formatação de hora do registro
   const horaRegistro = currentHourData?.time
     ? new Date(currentHourData.time).toLocaleTimeString('pt-BR', {
         hour: '2-digit',
@@ -177,198 +143,182 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
       })
     : null
 
-  // Estado de Carregamento (Skeleton)
+  // Seta de tendência de pressão
+  const renderTendenciaPressao = () => {
+    const pressao = data?.pressao_tendencia
+    if (!pressao || pressao.atual_hpa === null) return null
+
+    let seta = '→'
+    let cor = 'text-zinc-400'
+
+    if (pressao.direcao === 'subindo') {
+      seta = '↑'
+      cor = 'text-emerald-400'
+    } else if (pressao.direcao === 'descendo') {
+      seta = '↓'
+      cor = pressao.queda_severa ? 'text-red-400 font-bold animate-pulse' : 'text-amber-400'
+    }
+
+    return (
+      <span className={`inline-flex items-center gap-1 font-mono text-xs ${cor}`}>
+        <Gauge className="w-3.5 h-3.5 text-zinc-400" />
+        {pressao.atual_hpa} hPa {seta}
+      </span>
+    )
+  }
+
+  // Dados astronômicos e mar
+  const astro = data?.astronomia
+  const marAtual = data?.mar_atual
+  const coordsDMM = formatCoordinatesDMM(ponto.lat, ponto.lon)
+
+  const handleCopyCoords = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(coordsDMM)
+      setCopied(true)
+      toast({
+        title: 'Coordenadas copiadas!',
+        description: `${nomeExibicao}: ${coordsDMM}`,
+        duration: 2000,
+      })
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  // Estado de carregamento inicial
   if (loading) {
     return (
-      <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100 animate-pulse overflow-hidden">
+      <Card className="bg-[#11161d] border-zinc-800 shadow-md animate-pulse">
         <CardHeader className="pb-3 border-b border-zinc-800/80">
-          <div className="flex items-center justify-between gap-2">
-            <div className="space-y-2 flex-1">
-              <div className="h-5 bg-zinc-800 rounded w-3/4"></div>
-              <div className="h-4 bg-zinc-800/60 rounded w-1/3"></div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="h-5 w-32 bg-zinc-800 rounded"></div>
+              <div className="h-3 w-20 bg-zinc-850 rounded"></div>
             </div>
-            <div className="w-10 h-10 rounded-full bg-zinc-800"></div>
+            <div className="w-12 h-12 rounded-full bg-zinc-800"></div>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
-            <div className="h-16 bg-zinc-800/50 rounded-lg p-3"></div>
+        <CardContent className="p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="h-12 bg-zinc-850 rounded-lg"></div>
+            <div className="h-12 bg-zinc-850 rounded-lg"></div>
+            <div className="h-12 bg-zinc-850 rounded-lg"></div>
           </div>
+          <div className="h-8 bg-zinc-850 rounded"></div>
         </CardContent>
       </Card>
     )
   }
 
-  // Estado de Erro
-  if (error || !currentHourData) {
+  // Estado de erro no carregamento
+  if (error || !data) {
     return (
-      <Card className="bg-[#11161d] border-red-950/60 shadow-md text-zinc-100 overflow-hidden flex flex-col justify-between">
+      <Card className="bg-[#11161d] border-red-950/40 shadow-md">
         <CardHeader className="pb-2 border-b border-zinc-800/80">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+              <CardTitle className="text-base font-bold text-white flex items-center gap-1.5">
+                {isCustom && <span className="text-amber-400">⭐</span>}
                 {nomeExibicao}
               </CardTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={getTipoBadgeColor(ponto.tipo)}>
-                  {tipoFormatado}
-                </Badge>
-              </div>
+              <Badge
+                variant="outline"
+                className={`text-xs mt-1 border ${getTipoBadgeColor(ponto.tipo)}`}
+              >
+                {tipoFormatado}
+              </Badge>
             </div>
+            <Badge variant="destructive" className="bg-red-950 text-red-300 border-red-800 text-xs">
+              Indisponível
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 pb-6 flex-1 flex flex-col items-center justify-center text-center space-y-3">
-          <div className="w-10 h-10 rounded-full bg-red-950/50 border border-red-800/50 flex items-center justify-center text-red-400">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-zinc-200">Não foi possível carregar</p>
-            <p className="text-xs text-zinc-400 max-w-[240px] line-clamp-2">
-              {error || 'Dados meteorológicos indisponíveis no momento.'}
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start gap-2.5 text-xs text-red-400 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              {error || 'Não foi possível carregar a previsão deste ponto.'}
             </p>
           </div>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => onRetry(ponto.id)}
-            className="mt-2 bg-zinc-800/80 border-zinc-700 text-zinc-100 hover:bg-zinc-700 hover:text-white text-xs gap-1.5"
+            onClick={() => onRetry(ponto.id || ponto.slug || '')}
+            className="w-full bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/30 text-zinc-300 text-xs gap-1.5"
           >
-            <RotateCw className="w-3.5 h-3.5" />
-            Tentar de novo
+            <RefreshCw className="w-3.5 h-3.5" />
+            Tentar novamente
           </Button>
         </CardContent>
       </Card>
     )
   }
 
-  // Valores atuais
-  const windSpeed =
-    currentHourData.wind_speed_10m !== null
-      ? Math.round(currentHourData.wind_speed_10m * 10) / 10
-      : null
-  const beaufortValue =
-    currentHourData.beaufort !== undefined
-      ? currentHourData.beaufort
-      : getBeaufortScale(currentHourData.wind_speed_10m)
-  const windDirDeg = currentHourData.wind_direction_10m ?? 0
-  const windDirLabel = getWindDirectionLabel(currentHourData.wind_direction_10m)
-  const windGust =
-    currentHourData.wind_gusts_10m !== null
-      ? Math.round(currentHourData.wind_gusts_10m * 10) / 10
-      : null
-  const waveHeight =
-    currentHourData.wave_height !== null
-      ? (Math.round(currentHourData.wave_height * 100) / 100).toFixed(2)
-      : null
-  const wavePeriod =
-    currentHourData.wave_period !== null
-      ? (Math.round(currentHourData.wave_period * 10) / 10).toFixed(1)
-      : null
-  const seaLevel =
-    currentHourData.sea_level_height_msl !== null
-      ? (Math.round(currentHourData.sea_level_height_msl * 100) / 100).toFixed(2)
-      : null
-  const precip =
-    currentHourData.precipitation !== null
-      ? (Math.round(currentHourData.precipitation * 10) / 10).toFixed(1)
-      : '0.0'
+  const semaforo = getSemaforoStyle()
 
-  // Novos dados enriquecidos
+  // Valores atuais extraídos com segurança
+  const ventoSpeed =
+    currentHourData?.wind_speed_10m !== null && currentHourData?.wind_speed_10m !== undefined
+      ? Math.round(currentHourData.wind_speed_10m)
+      : null
+  const ventoDir = currentHourData?.wind_direction_10m
+  const ventoDirLabel = getWindDirectionLabel(ventoDir)
+  const rajada =
+    currentHourData?.wind_gusts_10m !== null && currentHourData?.wind_gusts_10m !== undefined
+      ? Math.round(currentHourData.wind_gusts_10m)
+      : null
+  const beaufort = currentHourData?.beaufort ?? 0
+
+  const ondaAltura =
+    currentHourData?.wave_height !== null && currentHourData?.wave_height !== undefined
+      ? currentHourData.wave_height.toFixed(1)
+      : null
+  const ondaPeriodo =
+    currentHourData?.wave_period !== null && currentHourData?.wave_period !== undefined
+      ? Math.round(currentHourData.wave_period)
+      : null
+
+  const mareMsl =
+    currentHourData?.sea_level_height_msl !== null &&
+    currentHourData?.sea_level_height_msl !== undefined
+      ? (currentHourData.sea_level_height_msl >= 0 ? '+' : '') +
+        currentHourData.sea_level_height_msl.toFixed(2)
+      : null
+
+  const chuvaMm =
+    currentHourData?.precipitation !== null && currentHourData?.precipitation !== undefined
+      ? currentHourData.precipitation.toFixed(1)
+      : null
+
   const tempAr =
-    currentHourData.temperature_2m !== null && currentHourData.temperature_2m !== undefined
+    currentHourData?.temperature_2m !== null && currentHourData?.temperature_2m !== undefined
       ? Math.round(currentHourData.temperature_2m)
       : null
-
   const tempAgua =
-    data?.mar_atual?.temperatura_agua !== null && data?.mar_atual?.temperatura_agua !== undefined
-      ? Math.round(data.mar_atual.temperatura_agua)
-      : currentHourData.sea_surface_temperature !== null &&
-          currentHourData.sea_surface_temperature !== undefined
-        ? Math.round(currentHourData.sea_surface_temperature)
-        : null
+    marAtual?.temperatura_agua !== null && marAtual?.temperatura_agua !== undefined
+      ? Math.round(marAtual.temperatura_agua)
+      : null
 
-  // Pressão atmosférica e tendência
-  const pressaoInfo = data?.pressao_tendencia || {
-    atual_hpa:
-      currentHourData.surface_pressure !== null && currentHourData.surface_pressure !== undefined
-        ? Math.round(currentHourData.surface_pressure)
-        : null,
-    delta_3h_hpa: 0,
-    direcao: 'estável',
-    queda_severa: false,
-  }
+  const scoreVal = currentScore !== undefined ? currentScore : null
+  const scoreOffset = scoreVal !== null ? 100 - scoreVal : 100
 
-  // Sol (nascer e pôr)
-  const sunriseStr = formatTimeHHMM(data?.astronomia?.nascer_do_sol)
-  const sunsetStr = formatTimeHHMM(data?.astronomia?.por_do_sol)
-
-  // Coordenadas DMM
-  const coordsDMM = formatCoordinatesDMM(ponto.lat, ponto.lon)
-
-  const arrowRotation = windDirDeg
-
-  const handleClickCard = () => {
-    const slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
-    navigate(`/ponto/${slugDestino}`)
-  }
-
-  const handleCopyCoords = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(coordsDMM)
-    setCopied(true)
-    toast({
-      title: 'Coordenadas copiadas!',
-      description: `${nomeExibicao}: ${coordsDMM}`,
-    })
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  // Render da Seta e Valor da Pressão
-  const renderPressaoBadge = () => {
-    if (pressaoInfo.atual_hpa === null) return null
-
-    // ↑ verde se subindo, → cinza se estável, ↓ vermelha se queda >= 3 hPa/3h (ou descendo)
-    let arrowIcon = <ArrowRight className="w-3.5 h-3.5 text-zinc-400 inline" />
-    let textColor = 'text-zinc-300'
-    let titleText = `Pressão estável (${pressaoInfo.delta_3h_hpa > 0 ? '+' : ''}${pressaoInfo.delta_3h_hpa} hPa / 3h)`
-
-    if (pressaoInfo.direcao === 'subindo') {
-      arrowIcon = <ArrowUp className="w-3.5 h-3.5 text-emerald-400 inline" />
-      textColor = 'text-emerald-300'
-      titleText = `Pressão subindo (+${pressaoInfo.delta_3h_hpa} hPa / 3h)`
-    } else if (pressaoInfo.queda_severa) {
-      arrowIcon = <ArrowDown className="w-3.5 h-3.5 text-red-400 inline animate-bounce" />
-      textColor = 'text-red-400 font-bold'
-      titleText = `Queda severa de pressão: ${pressaoInfo.delta_3h_hpa} hPa / 3h`
-    } else if (pressaoInfo.direcao === 'descendo') {
-      arrowIcon = <ArrowDown className="w-3.5 h-3.5 text-amber-400 inline" />
-      textColor = 'text-amber-300'
-      titleText = `Pressão descendo (${pressaoInfo.delta_3h_hpa} hPa / 3h)`
+  const handleCardClick = () => {
+    let slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
+    if (isCustom) {
+      slugDestino =
+        ponto.slug || (ponto.id && ponto.id.startsWith('custom-') ? ponto.id : `custom-${ponto.id}`)
     }
-
-    return (
-      <span
-        className={`inline-flex items-center gap-1 font-mono text-[11px] ${textColor}`}
-        title={titleText}
-      >
-        <span>{pressaoInfo.atual_hpa} hPa</span>
-        {arrowIcon}
-      </span>
-    )
+    navigate(`/ponto/${slugDestino}`)
   }
 
   return (
     <Card
-      onClick={handleClickCard}
-      className="bg-[#11161d] border-zinc-800/90 shadow-lg text-zinc-100 overflow-hidden hover:border-cyan-700/70 hover:shadow-cyan-950/20 hover:scale-[1.01] transition-all cursor-pointer group flex flex-col justify-between"
+      onClick={handleCardClick}
+      className="bg-[#11161d] border-zinc-800/90 hover:border-cyan-500/60 shadow-lg hover:shadow-cyan-950/30 transition-all duration-200 cursor-pointer text-zinc-100 flex flex-col justify-between group overflow-hidden"
     >
       <div>
-        {/* Header com Nome, Tipo, Semáforo e Score Circular */}
+        {/* Cabeçalho do Card */}
         <CardHeader className="pb-3 border-b border-zinc-800/70 bg-[#0d1218]/60">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
@@ -390,302 +340,213 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
                 </Badge>
                 {horaRegistro && (
                   <span className="text-[11px] text-zinc-400 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-zinc-400" />
+                    <Clock className="w-3 h-3 text-zinc-500" />
                     {horaRegistro}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Lado Direito: Semáforo + Score Numérico Circular */}
-            <div className="flex items-center gap-3 shrink-0">
-              {/* Score Circular 0-100 */}
-              <div
-                className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-full border border-zinc-800"
-                title={`Score de navegabilidade: ${currentScore !== null && currentScore !== undefined ? currentScore : '--'}/100`}
-              >
-                <div className="relative w-8 h-8 flex items-center justify-center">
-                  <svg className="w-8 h-8 transform -rotate-90">
-                    <circle
-                      cx="16"
-                      cy="16"
-                      r={radius}
-                      stroke="currentColor"
-                      strokeWidth={strokeWidth}
-                      className="text-zinc-800"
-                      fill="transparent"
-                    />
-                    <circle
-                      cx="16"
-                      cy="16"
-                      r={radius}
-                      stroke={scoreInfo.strokeColor}
-                      strokeWidth={strokeWidth}
-                      strokeDasharray={circumference}
-                      strokeDashoffset={strokeDashoffset}
+            {/* Score Circular */}
+            <div className="flex flex-col items-center">
+              <div className="relative w-12 h-12 flex items-center justify-center">
+                <svg className="w-12 h-12 -rotate-90 transform" viewBox="0 0 36 36">
+                  <path
+                    className="text-zinc-800"
+                    strokeWidth="3"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  {scoreVal !== null && (
+                    <path
+                      strokeDasharray="100, 100"
+                      strokeDashoffset={scoreOffset}
+                      strokeWidth="3"
                       strokeLinecap="round"
-                      fill="transparent"
-                      className="transition-all duration-700 ease-out"
+                      stroke={getScoreStrokeColor(scoreVal)}
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
-                  </svg>
-                  <span className={`absolute text-[11px] font-black ${scoreInfo.textColor}`}>
-                    {currentScore !== null && currentScore !== undefined ? currentScore : '--'}
+                  )}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className={`text-xs font-black ${getScoreColorClass(scoreVal)}`}>
+                    {scoreVal !== null ? scoreVal : '--'}
                   </span>
-                </div>
-                <div className="flex flex-col pr-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-zinc-400 font-bold leading-none">
-                    Score
-                  </span>
-                  <span className="text-[10px] text-zinc-400 leading-tight">/100</span>
+                  <span className="text-[8px] text-zinc-400 -mt-0.5">pts</span>
                 </div>
               </div>
-
-              {/* Semáforo de Condição */}
-              <div
-                className="hidden sm:flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-full border border-zinc-800"
-                title={`Condição: ${semaforoInfo.label}`}
-              >
-                <span
-                  className={`w-3 h-3 rounded-full inline-block ${semaforoInfo.bg} ${semaforoInfo.glow}`}
-                  aria-label={`Semáforo ${semaforoInfo.label}`}
-                />
-                <span
-                  className={`text-xs font-semibold uppercase tracking-wider ${semaforoInfo.text}`}
-                >
-                  {semaforoInfo.label}
-                </span>
-              </div>
+              <span className="text-[9px] text-zinc-400 font-medium mt-0.5">Score</span>
             </div>
           </div>
         </CardHeader>
 
-        {/* Grid de Métricas Principais */}
-        <CardContent className="pt-3 pb-2.5 space-y-2.5">
-          {/* Bloco 1: Vento e Rajada (com Beaufort Fx) */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Card Vento */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                <span className="flex items-center gap-1">
-                  <Wind className="w-3.5 h-3.5 text-sky-400" />
-                  Vento
-                </span>
-                <span className="text-[10px] text-zinc-400 font-mono flex items-center gap-0.5">
-                  <Compass className="w-3 h-3" />
-                  {windDirLabel}
-                </span>
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black text-white tracking-tight">
-                    {windSpeed !== null ? windSpeed : '--'}
+        {/* Corpo com Grid de Condições */}
+        <CardContent className="p-4 space-y-3.5">
+          {/* Métricas Principais (Vento, Onda, Maré/Chuva) */}
+          <div className="grid grid-cols-3 gap-2">
+            {/* Vento */}
+            <div className="bg-[#161c24] border border-zinc-800/80 rounded-xl p-2.5 flex flex-col justify-between">
+              <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-medium">
+                <Wind className="w-3.5 h-3.5 text-sky-400" />
+                Vento
+              </span>
+              <div className="my-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-lg font-black text-white font-mono">
+                    {ventoSpeed !== null ? ventoSpeed : '--'}
                   </span>
-                  <span className="text-xs font-semibold text-zinc-400">kt</span>
-                  <Badge
-                    variant="outline"
-                    className="ml-1 bg-sky-950/70 border-sky-800/60 text-sky-300 text-[10px] px-1.5 py-0 font-bold"
-                    title={`Escala Beaufort: Força ${beaufortValue}`}
-                  >
-                    F{beaufortValue}
-                  </Badge>
+                  <span className="text-xs text-zinc-400">kt</span>
                 </div>
-
-                {/* Seta de Direção do Vento */}
-                <div
-                  className="w-7 h-7 rounded-full bg-sky-950/60 border border-sky-800/50 flex items-center justify-center text-sky-300"
-                  title={`Direção do vento: ${windDirDeg}° (${windDirLabel})`}
-                >
-                  <Navigation2
-                    className="w-4 h-4 transform transition-transform duration-500"
-                    style={{ transform: `rotate(${arrowRotation}deg)` }}
+                {rajada !== null && (
+                  <p className="text-[10px] text-amber-400 font-medium">raj: {rajada} kt</p>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60">
+                <span className="flex items-center gap-1">
+                  <Compass
+                    className="w-3 h-3 text-sky-400"
+                    style={{ transform: `rotate(${ventoDir ?? 0}deg)` }}
                   />
-                </div>
+                  {ventoDirLabel}
+                </span>
+                <Badge
+                  variant="outline"
+                  className="text-[9px] px-1 py-0 border-zinc-700 bg-zinc-800 text-zinc-300"
+                >
+                  F{beaufort}
+                </Badge>
               </div>
             </div>
 
-            {/* Card Rajada */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                <span className="flex items-center gap-1">
-                  <Gauge className="w-3.5 h-3.5 text-amber-400" />
-                  Rajada
-                </span>
-                <span className="text-[10px] text-zinc-400">máx</span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-2xl font-black text-white tracking-tight">
-                  {windGust !== null ? windGust : '--'}
-                </span>
-                <span className="text-xs font-semibold text-zinc-400">kt</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bloco 2: Onda e Período */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Card Onda */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center text-zinc-400 text-xs font-medium gap-1">
+            {/* Onda */}
+            <div className="bg-[#161c24] border border-zinc-800/80 rounded-xl p-2.5 flex flex-col justify-between">
+              <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-medium">
                 <Waves className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Onda</span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-xl font-bold text-white tracking-tight">
-                  {waveHeight !== null ? waveHeight : '--'}
-                </span>
-                <span className="text-xs font-semibold text-zinc-400">m</span>
-              </div>
-            </div>
-
-            {/* Card Período */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center text-zinc-400 text-xs font-medium gap-1">
-                <Clock className="w-3.5 h-3.5 text-teal-400" />
-                <span>Período</span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-xl font-bold text-white tracking-tight">
-                  {wavePeriod !== null ? wavePeriod : '--'}
-                </span>
-                <span className="text-xs font-semibold text-zinc-400">s</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bloco 3: Maré (MSL) e Chuva */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Card Maré */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                <span className="flex items-center gap-1">
-                  <Waves className="w-3.5 h-3.5 text-blue-400" />
-                  Maré (MSL)
-                </span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-xl font-bold text-white tracking-tight">
-                  {seaLevel !== null ? (Number(seaLevel) > 0 ? `+${seaLevel}` : seaLevel) : '--'}
-                </span>
-                <span className="text-xs font-semibold text-zinc-400">m</span>
-              </div>
-            </div>
-
-            {/* Card Chuva */}
-            <div className="bg-[#161c24] border border-zinc-800/80 rounded-lg p-2.5 flex flex-col justify-between">
-              <div className="flex items-center text-zinc-400 text-xs font-medium gap-1">
-                <CloudRain className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Chuva</span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-xl font-bold text-white tracking-tight">{precip}</span>
-                <span className="text-xs font-semibold text-zinc-400">mm</span>
-              </div>
-            </div>
-          </div>
-
-          {/* LINHA DISCRETA DE ENRIQUECIMENTO NÁUTICO: Sol, Temp Ar/Água, Coordenadas, Pressão */}
-          <div className="mt-2 pt-2 border-t border-zinc-800/80 bg-[#0d1218]/50 rounded-lg p-2 space-y-1.5 text-xs text-zinc-400">
-            {/* Sublinha 1: Sol, Temperaturas e Pressão */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* Sol: Nascer e Pôr */}
-              <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-300">
-                <span className="flex items-center gap-1" title="Nascer do Sol">
-                  <Sunrise className="w-3.5 h-3.5 text-amber-400" />
-                  {sunriseStr}
-                </span>
-                <span className="text-zinc-600">·</span>
-                <span className="flex items-center gap-1" title="Pôr do Sol">
-                  <Sunset className="w-3.5 h-3.5 text-orange-400" />
-                  {sunsetStr}
-                </span>
-              </div>
-
-              {/* Temperaturas: Ar e Água */}
-              <div className="flex items-center gap-2 font-mono text-[11px]">
-                {tempAr !== null && (
-                  <span
-                    className="flex items-center gap-0.5 text-zinc-300"
-                    title={`Temperatura do ar: ${tempAr}°C`}
-                  >
-                    <Thermometer className="w-3 h-3 text-orange-300" />
-                    <span>{tempAr}°C ar</span>
+                Onda
+              </span>
+              <div className="my-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-lg font-black text-white font-mono">
+                    {ondaAltura !== null ? ondaAltura : '--'}
                   </span>
-                )}
-                {tempAgua !== null && (
-                  <>
-                    <span className="text-zinc-600">·</span>
-                    <span
-                      className="flex items-center gap-0.5 text-cyan-300"
-                      title={`Temperatura da água: ${tempAgua}°C`}
-                    >
-                      <Droplets className="w-3 h-3 text-cyan-400" />
-                      <span>{tempAgua}°C mar</span>
-                    </span>
-                  </>
+                  <span className="text-xs text-zinc-400">m</span>
+                </div>
+                {ondaPeriodo !== null && (
+                  <p className="text-[10px] text-cyan-300 font-medium">per: {ondaPeriodo}s</p>
                 )}
               </div>
-
-              {/* Pressão com Tendência */}
-              <div className="flex items-center">{renderPressaoBadge()}</div>
+              <div className="text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60 flex items-center justify-between">
+                <span>Douglas</span>
+                <span className="font-mono text-zinc-300">G{marAtual?.douglas_grau ?? 0}</span>
+              </div>
             </div>
 
-            {/* Sublinha 2: Coordenadas em DMM com botão de copiar */}
-            <div className="flex items-center justify-between pt-1 border-t border-zinc-800/40 text-[11px]">
-              <span className="text-zinc-500 font-mono flex items-center gap-1">
-                <Compass className="w-3 h-3 text-zinc-500" />
+            {/* Maré e Chuva */}
+            <div className="bg-[#161c24] border border-zinc-800/80 rounded-xl p-2.5 flex flex-col justify-between">
+              <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-medium">
+                <Droplets className="w-3.5 h-3.5 text-indigo-400" />
+                Maré / Chuva
+              </span>
+              <div className="my-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-base font-bold text-white font-mono">
+                    {mareMsl !== null ? `${mareMsl}m` : '--'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-indigo-300 font-medium">
+                  {chuvaMm !== null ? `${chuvaMm} mm/h` : '0 mm/h'}
+                </p>
+              </div>
+              <div className="text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60 flex items-center justify-between">
+                <span>Semáforo</span>
+                <span className={`font-semibold ${semaforo.textColor}`}>{semaforo.label}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Próxima Janela de Navegação */}
+          <div className="bg-[#131922] border border-cyan-900/40 rounded-xl p-2.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">
+                  Próxima Janela
+                </span>
+                <p className="text-xs font-semibold text-white">
+                  {loadingJanelas ? (
+                    <span className="text-zinc-400 animate-pulse">Calculando janelas...</span>
+                  ) : proximaJanela ? (
+                    formatarJanelaBadge(proximaJanela.inicio, proximaJanela.fim)
+                  ) : (
+                    <span className="text-zinc-400">Sem janela nas próximas 72h</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            {proximaJanela && (
+              <Badge className="bg-cyan-950 text-cyan-300 border-cyan-800 text-[10px] font-mono px-2 py-0.5 shrink-0">
+                Score {proximaJanela.score_medio}
+              </Badge>
+            )}
+          </div>
+
+          {/* Linha Discreta: Sol, Temperatura, Pressão e Coordenadas */}
+          <div className="space-y-1.5 pt-1 text-[11px] text-zinc-400">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {astro?.nascer_do_sol && astro?.por_do_sol && (
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-amber-300">
+                    <Sun className="w-3 h-3" />
+                    {formatTimeHHMM(astro.nascer_do_sol)}
+                  </span>
+                  <span className="flex items-center gap-1 text-orange-400">
+                    <Sunset className="w-3 h-3" />
+                    {formatTimeHHMM(astro.por_do_sol)}
+                  </span>
+                </div>
+              )}
+
+              {(tempAr !== null || tempAgua !== null) && (
+                <div className="flex items-center gap-2 text-zinc-300">
+                  {tempAr !== null && (
+                    <span className="flex items-center gap-1" title="Temperatura do Ar">
+                      <Thermometer className="w-3 h-3 text-rose-400" />
+                      {tempAr}°C ar
+                    </span>
+                  )}
+                  {tempAgua !== null && (
+                    <span className="text-cyan-300 font-medium" title="Temperatura da Água">
+                      • {tempAgua}°C mar
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {renderTendenciaPressao()}
+            </div>
+
+            {/* Coordenadas DMM com Botão Copiar */}
+            <div className="flex items-center justify-between border-t border-zinc-800/50 pt-1.5">
+              <span className="text-[10px] font-mono text-zinc-500 truncate select-all">
                 {coordsDMM}
               </span>
               <button
+                type="button"
                 onClick={handleCopyCoords}
-                className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-cyan-300 bg-zinc-800/60 hover:bg-zinc-800 px-1.5 py-0.5 rounded transition-colors"
-                title="Copiar coordenadas em Graus e Minutos Decimais"
+                className="p-1 rounded text-zinc-400 hover:text-cyan-300 hover:bg-zinc-800 transition-colors shrink-0"
+                title="Copiar coordenadas DMM"
               >
                 {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400">Copiado</span>
-                  </>
+                  <Check className="w-3 h-3 text-emerald-400" />
                 ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copiar</span>
-                  </>
+                  <Copy className="w-3 h-3" />
                 )}
               </button>
             </div>
           </div>
         </CardContent>
-      </div>
-
-      {/* Badge de Próxima Janela Ideal */}
-      <div className="px-4 pb-3 pt-1 border-t border-zinc-800/60 bg-[#0d1218]/40">
-        {loadingJanelas ? (
-          <div className="h-5 bg-zinc-800/50 rounded animate-pulse w-48"></div>
-        ) : proximaJanela ? (
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-zinc-400 flex items-center gap-1.5 font-medium">
-              <CalendarCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Próxima janela:
-            </span>
-            <Badge
-              variant="outline"
-              className="bg-emerald-950/60 text-emerald-300 border-emerald-700/60 font-semibold px-2 py-0.5 text-[11px]"
-            >
-              {formatarJanelaBadge(proximaJanela.inicio, proximaJanela.fim)} (
-              {proximaJanela.score_medio} pts)
-            </Badge>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between text-xs text-zinc-500">
-            <span className="flex items-center gap-1.5">
-              <CalendarCheck className="w-3.5 h-3.5 text-zinc-500" />
-              Próxima janela:
-            </span>
-            <span className="text-[11px] text-zinc-500 italic">
-              Sem janelas ideais nos próximos 3 dias
-            </span>
-          </div>
-        )}
       </div>
     </Card>
   )

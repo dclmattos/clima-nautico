@@ -1,112 +1,107 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { Ponto, PontoEstadoPrevisao } from '@/types/nautico'
+import { Ponto, PontoEstadoPrevisao, JanelaNavegacao } from '@/types/nautico'
 import {
   fetchPontos,
   fetchPrevisaoPorPonto,
   fetchJanelas,
+  buscarPrevisaoPorCoordenadas,
+  buscarJanelasPorCoordenadas,
   getCurrentHourForecast,
   calculateSemaforo,
   getProximaJanela,
+  PONTOS_DISPONIVEIS,
 } from '@/services/previsaoService'
+import { getPontosPersonalizados } from '@/lib/preferencesStorage'
 import { PontoCard } from '@/components/PontoCard'
 import { BriefingCard } from '@/components/BriefingCard'
-import { Button } from '@/components/ui/button'
-import { LoadingState } from '@/components/ui/LoadingState'
-import { ErrorState } from '@/components/ui/ErrorState'
-import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import { usePerfil } from '@/contexts/PerfilContext'
-import { RotateCw, Anchor, Compass, Ship, Sailboat, Zap } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { RefreshCw, MapPin } from 'lucide-react'
+import { LoadingState } from '@/components/ui/LoadingState'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 
-const Index: React.FC = () => {
-  const { perfil, perfis, setPerfil, deviceId, preferencias } = usePerfil()
-  const [pontosEstados, setPontosEstados] = useState<Record<string, PontoEstadoPrevisao>>({})
-  const [pontosList, setPontosList] = useState<Ponto[]>([])
-  const [loadingInitial, setLoadingInitial] = useState<boolean>(true)
-  const [generalError, setGeneralError] = useState<string | null>(null)
-  const [currentTimeStr, setCurrentTimeStr] = useState<string>('')
-  const [isRefreshingAll, setIsRefreshingAll] = useState<boolean>(false)
+export const Index: React.FC = () => {
+  const { perfil, deviceId } = usePerfil()
+  const [pontosEstados, setPontosEstados] = useState<PontoEstadoPrevisao[]>([])
+  const [loadingGeral, setLoadingGeral] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  // Atualiza relógio
-  const updateClock = useCallback(() => {
-    const now = new Date()
-    const formatted = now.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    setCurrentTimeStr(formatted)
-  }, [])
+  // Ordem canônica dos 4 pontos fixos
+  const SLUG_ORDER = ['angra', 'abraao', 'paraty', 'juatinga']
 
-  useEffect(() => {
-    updateClock()
-    const interval = setInterval(updateClock, 30000)
-    return () => clearInterval(interval)
-  }, [updateClock])
-
-  // Carrega previsão e janelas para um ponto específico
-  const loadDadosPonto = useCallback(async (ponto: Ponto, perfilId: string) => {
-    setPontosEstados((prev) => ({
-      ...prev,
-      [ponto.id]: {
-        ponto,
-        loading: prev[ponto.id]?.data ? false : true,
-        error: null,
-        data: prev[ponto.id]?.data || null,
-        currentHourData: prev[ponto.id]?.currentHourData || null,
-        statusSemaforo: prev[ponto.id]?.statusSemaforo || null,
-        janelasData: prev[ponto.id]?.janelasData || null,
-        loadingJanelas: true,
-        currentScore: prev[ponto.id]?.currentScore ?? null,
-        proximaJanela: prev[ponto.id]?.proximaJanela ?? null,
+  /**
+   * Carrega dados de previsão e janelas de um ponto específico
+   */
+  const carregarDadosPonto = useCallback(
+    async (
+      ponto: Ponto,
+      perfilId: string,
+      customOpts?: {
+        lat: number
+        lon: number
+        tipo: string
+        nome?: string
+        isPersonalizado?: boolean
       },
-    }))
-
-    try {
-      // 1. Busca previsão básica do ponto
-      const data = await fetchPrevisaoPorPonto(ponto.id)
-      const currentHour = getCurrentHourForecast(data.hourly)
-      const semaforo = calculateSemaforo(currentHour)
-
-      // 2. Busca janelas e scores com base no perfil atual
-      let janelasData = null
-      let currentScore = null
-      let proximaJanela = null
-
+    ): Promise<PontoEstadoPrevisao> => {
+      const isCustom = !!customOpts?.isPersonalizado || (ponto.id && ponto.id.startsWith('custom-'))
       try {
-        janelasData = await fetchJanelas(ponto.id, perfilId)
-        if (janelasData && janelasData.hourly_scores && janelasData.hourly_scores.length > 0) {
-          // Acha o score da hora atual
-          const currentScoreObj = getCurrentHourForecast(
-            janelasData.hourly_scores as unknown as import('@/types/nautico').PrevisaoHoraItem[],
-          ) as unknown as import('@/types/nautico').HourlyScore | null
-          currentScore = currentScoreObj?.score ?? null
-        }
-        if (janelasData && janelasData.janelas) {
-          proximaJanela = getProximaJanela(janelasData.janelas)
-        }
-      } catch (jErr) {
-        console.warn(`Erro ao carregar janelas para ${ponto.nome}:`, jErr)
-      }
+        const [prevData, janelasData] = await Promise.all([
+          fetchPrevisaoPorPonto(
+            isCustom ? '' : ponto.slug || ponto.id,
+            customOpts
+              ? {
+                  lat: customOpts.lat,
+                  lon: customOpts.lon,
+                  tipo: customOpts.tipo,
+                  nome: customOpts.nome,
+                }
+              : undefined,
+          ),
+          fetchJanelas(
+            isCustom ? '' : ponto.slug || ponto.id,
+            perfilId,
+            customOpts
+              ? {
+                  lat: customOpts.lat,
+                  lon: customOpts.lon,
+                  tipo: customOpts.tipo,
+                  nome: customOpts.nome,
+                }
+              : undefined,
+          ),
+        ])
 
-      setPontosEstados((prev) => ({
-        ...prev,
-        [ponto.id]: {
+        const currentHour = prevData?.hourly ? getCurrentHourForecast(prevData.hourly) : null
+        const semaforo = currentHour ? calculateSemaforo(currentHour) : null
+
+        // Próxima janela de navegação encontrada
+        const proxima = janelasData?.janelas ? getProximaJanela(janelasData.janelas) : null
+
+        // Score atual baseado na hora mais próxima
+        let scoreAtual = null
+        if (janelasData?.hourly_scores && currentHour) {
+          const matchedScore = janelasData.hourly_scores.find((s) => s.time === currentHour.time)
+          if (matchedScore) {
+            scoreAtual = matchedScore.score
+          }
+        }
+
+        return {
           ponto,
           loading: false,
           error: null,
-          data,
+          data: prevData,
           currentHourData: currentHour,
           statusSemaforo: semaforo,
-          janelasData,
+          janelasData: janelasData,
           loadingJanelas: false,
-          currentScore,
-          proximaJanela,
-        },
-      }))
-    } catch (err: any) {
-      console.error(`Erro ao carregar previsão para ${ponto.nome}:`, err)
-      setPontosEstados((prev) => ({
-        ...prev,
-        [ponto.id]: {
+          currentScore: scoreAtual,
+          proximaJanela: proxima,
+          isPersonalizado: isCustom,
+        }
+      } catch (err: any) {
+        console.error(`Erro ao carregar dados do ponto ${ponto.nome}:`, err)
+        return {
           ponto,
           loading: false,
           error: err?.message || 'Falha ao obter dados meteorológicos',
@@ -117,242 +112,226 @@ const Index: React.FC = () => {
           loadingJanelas: false,
           currentScore: null,
           proximaJanela: null,
-        },
-      }))
-    }
-  }, [])
-
-  // Carrega todos os pontos e suas previsões
-  const carregarTodosPontos = useCallback(async () => {
-    setGeneralError(null)
-    try {
-      let pontos: Ponto[] = []
-      try {
-        pontos = await fetchPontos()
-      } catch (err: any) {
-        console.warn('Fallback para pontos padrão:', err)
-      }
-
-      if (!pontos || pontos.length === 0) {
-        pontos = [
-          {
-            id: 'angra',
-            slug: 'angra',
-            nome: 'angra',
-            lat: -23.005,
-            lon: -44.318,
-            tipo: 'abrigado',
-          },
-          { id: 'abraao', slug: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
-          {
-            id: 'paraty',
-            slug: 'paraty',
-            nome: 'paraty',
-            lat: -23.22,
-            lon: -44.7,
-            tipo: 'abrigado',
-          },
-          {
-            id: 'juatinga',
-            slug: 'juatinga',
-            nome: 'juatinga',
-            lat: -23.3,
-            lon: -44.5,
-            tipo: 'aberto',
-          },
-        ]
-      }
-
-      setPontosList(pontos)
-
-      const initialMap: Record<string, PontoEstadoPrevisao> = {}
-      pontos.forEach((p) => {
-        initialMap[p.id] = {
-          ponto: p,
-          loading: true,
-          error: null,
-          data: null,
-          currentHourData: null,
-          statusSemaforo: null,
-          janelasData: null,
-          loadingJanelas: true,
-          currentScore: null,
-          proximaJanela: null,
+          isPersonalizado: isCustom,
         }
-      })
-      setPontosEstados(initialMap)
-      setLoadingInitial(false)
+      }
+    },
+    [],
+  )
 
-      const activePerfilId = perfil?.id || 'lancha'
-      await Promise.all(pontos.map((p) => loadDadosPonto(p, activePerfilId)))
-    } catch (err: any) {
-      setGeneralError('Não foi possível inicializar os pontos de navegação.')
-      setLoadingInitial(false)
-    }
-  }, [loadDadosPonto, perfil?.id])
+  /**
+   * Inicializa ou recarrega a lista de pontos (fixos + personalizados)
+   */
+  const carregarTodosPontos = useCallback(
+    async (isManualRefresh = false) => {
+      if (isManualRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoadingGeral(true)
+      }
 
-  // Recarrega quando o perfil mudar
-  useEffect(() => {
-    if (pontosList.length > 0 && perfil?.id) {
-      pontosList.forEach((p) => loadDadosPonto(p, perfil.id))
-    }
-  }, [perfil?.id, loadDadosPonto, pontosList])
+      try {
+        let pontosFixos: Ponto[] = []
+        try {
+          pontosFixos = await fetchPontos()
+        } catch {
+          pontosFixos = PONTOS_DISPONIVEIS.map((p) => ({
+            id: p.slug,
+            nome: p.nomeCurto,
+            lat: p.lat,
+            lon: p.lon,
+            tipo: p.tipo as any,
+            slug: p.slug,
+            descricao_abrigo: p.nomeCompleto,
+          }))
+        }
+
+        // Ordena os pontos fixos canônicos
+        const pontosFixosOrdenados = [...pontosFixos].sort((a, b) => {
+          const idxA = SLUG_ORDER.indexOf(a.slug || a.nome.toLowerCase())
+          const idxB = SLUG_ORDER.indexOf(b.slug || b.nome.toLowerCase())
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return a.nome.localeCompare(b.nome)
+        })
+
+        // Pontos Personalizados do localStorage
+        const customPontosStorage = getPontosPersonalizados()
+        const pontosCustomFormatados: Array<{
+          ponto: Ponto
+          customOpts: {
+            lat: number
+            lon: number
+            tipo: string
+            nome: string
+            isPersonalizado: boolean
+          }
+        }> = customPontosStorage.map((cp) => ({
+          ponto: {
+            id: `custom-${cp.id}`,
+            nome: cp.nome,
+            lat: cp.lat,
+            lon: cp.lon,
+            tipo: cp.tipo as any,
+            slug: `custom-${cp.id}`,
+            descricao_abrigo: 'Ponto Personalizado',
+          },
+          customOpts: {
+            lat: cp.lat,
+            lon: cp.lon,
+            tipo: cp.tipo,
+            nome: cp.nome,
+            isPersonalizado: true,
+          },
+        }))
+
+        const perfilId = perfil?.id || 'lancha'
+
+        // Carrega em paralelo: fixos + personalizados
+        const promessasFixos = pontosFixosOrdenados.map((p) => carregarDadosPonto(p, perfilId))
+        const promessasCustom = pontosCustomFormatados.map(({ ponto, customOpts }) =>
+          carregarDadosPonto(ponto, perfilId, customOpts),
+        )
+
+        const resultados = await Promise.all([...promessasFixos, ...promessasCustom])
+        setPontosEstados(resultados)
+      } catch (err: any) {
+        console.error('Erro ao listar pontos:', err)
+      } finally {
+        setLoadingGeral(false)
+        setRefreshing(false)
+      }
+    },
+    [carregarDadosPonto, perfil?.id],
+  )
 
   useEffect(() => {
     carregarTodosPontos()
   }, [carregarTodosPontos])
 
-  // Atualizar tudo manualmente
-  const handleRefreshAll = async () => {
-    setIsRefreshingAll(true)
-    updateClock()
-    const activePerfilId = perfil?.id || 'lancha'
-    await Promise.all(pontosList.map((p) => loadDadosPonto(p, activePerfilId)))
-    setIsRefreshingAll(false)
+  /**
+   * Tenta recarregar um ponto individual
+   */
+  const handleRetryPonto = async (pontoIdentifier: string) => {
+    const estadoIdx = pontosEstados.findIndex(
+      (e) => e.ponto.id === pontoIdentifier || e.ponto.slug === pontoIdentifier,
+    )
+    if (estadoIdx === -1) return
+
+    const estadoAlvo = pontosEstados[estadoIdx]
+
+    // Marca como loading
+    setPontosEstados((prev) => {
+      const clone = [...prev]
+      clone[estadoIdx] = { ...estadoAlvo, loading: true, error: null }
+      return clone
+    })
+
+    const perfilId = perfil?.id || 'lancha'
+    const isCustom =
+      !!estadoAlvo.isPersonalizado ||
+      (estadoAlvo.ponto.id && estadoAlvo.ponto.id.startsWith('custom-'))
+
+    const novoEstado = await carregarDadosPonto(
+      estadoAlvo.ponto,
+      perfilId,
+      isCustom
+        ? {
+            lat: estadoAlvo.ponto.lat,
+            lon: estadoAlvo.ponto.lon,
+            tipo: estadoAlvo.ponto.tipo,
+            nome: estadoAlvo.ponto.nome,
+            isPersonalizado: true,
+          }
+        : undefined,
+    )
+
+    setPontosEstados((prev) => {
+      const clone = [...prev]
+      clone[estadoIdx] = novoEstado
+      return clone
+    })
   }
 
-  const getPerfilIcon = (nome: string) => {
-    const n = nome.toLowerCase()
-    if (n.includes('veleiro') || n.includes('vela')) {
-      return <Sailboat className="w-3.5 h-3.5" />
-    }
-    if (n.includes('jet')) {
-      return <Zap className="w-3.5 h-3.5" />
-    }
-    return <Ship className="w-3.5 h-3.5" />
-  }
+  // Divisão entre Fixos e Personalizados
+  const pontosFixosEstados = useMemo(() => {
+    return pontosEstados.filter((e) => !e.isPersonalizado && !e.ponto.id?.startsWith('custom-'))
+  }, [pontosEstados])
+
+  const pontosCustomEstados = useMemo(() => {
+    return pontosEstados.filter((e) => e.isPersonalizado || e.ponto.id?.startsWith('custom-'))
+  }, [pontosEstados])
 
   return (
-    <PullToRefresh
-      onRefresh={handleRefreshAll}
-      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6"
-    >
-      {/* Container Principal */}
-      <div className="w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col space-y-5">
-        {/* Topo do App com Header e Seletor de Perfil */}
-        <header className="space-y-4 border-b border-zinc-800/80 pb-4">
-          <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6 pb-12">
+      {/* Bloco 1: Briefing do Comandante (IA) */}
+      <section aria-label="Briefing do Comandante">
+        <BriefingCard />
+      </section>
+
+      {/* Bloco 2: Monitoramento dos Pontos */}
+      <section aria-label="Condições dos Pontos" className="space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-cyan-400" />
             <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-700/60 flex items-center justify-center text-cyan-300">
-                  <Anchor className="w-4 h-4" />
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                  Clima Náutico
-                </h1>
-              </div>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-1 flex items-center gap-1.5 font-medium">
-                <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                Baía de Ilha Grande · {currentTimeStr || '--:--'}
+              <h2 className="text-lg font-bold text-white tracking-tight">Condições dos Pontos</h2>
+              <p className="text-xs text-zinc-400">
+                Baía de Ilha Grande · Atualizado a cada 30 minutos
               </p>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshAll}
-              disabled={isRefreshingAll || loadingInitial}
-              className="bg-[#121820] border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 text-xs gap-1.5 shrink-0"
-              title="Atualizar dados de todos os pontos"
-            >
-              <RotateCw className={`w-3.5 h-3.5 ${isRefreshingAll ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Atualizar</span>
-            </Button>
           </div>
 
-          {/* Seletor Segmentado de Perfil de Navegação */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#11161d] p-2 rounded-xl border border-zinc-800/80">
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Perfil de Embarcação:
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#0a0e14] p-1 rounded-lg border border-zinc-800/90 overflow-x-auto">
-              {(perfis.length > 0
-                ? perfis
-                : [
-                    { id: 'lancha', nome: 'lancha' },
-                    { id: 'veleiro', nome: 'veleiro' },
-                    { id: 'jet', nome: 'jet' },
-                  ]
-              ).map((p) => {
-                const isSelected =
-                  perfil?.id === p.id || perfil?.nome?.toLowerCase() === p.nome?.toLowerCase()
-                const label = p.nome.charAt(0).toUpperCase() + p.nome.slice(1)
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => carregarTodosPontos(true)}
+            disabled={refreshing || loadingGeral}
+            className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-8"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-400' : ''}`}
+            />
+            <span className="hidden sm:inline">Atualizar</span>
+          </Button>
+        </div>
 
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setPerfil(p.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                      isSelected
-                        ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/80 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 border border-transparent'
-                    }`}
-                  >
-                    {getPerfilIcon(p.nome)}
-                    <span>{label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </header>
-
-        {/* 1. Briefing do Comandante (acima dos cards) */}
-        <section>
-          <BriefingCard
-            perfilId={perfil?.id || 'lancha'}
-            deviceId={deviceId}
-            ultimoBriefingInicial={preferencias?.ultimo_briefing}
-            updatedAtInicial={preferencias?.updated || preferencias?.created}
-          />
-        </section>
-
-        {/* Mensagem de Erro Geral */}
-        {generalError && (
-          <ErrorState
-            title="Erro de Conexão"
-            message={generalError}
-            onRetry={carregarTodosPontos}
-          />
-        )}
-
-        {/* Loading Inicial */}
-        {loadingInitial && !generalError && <LoadingState variant="cards" count={4} />}
-
-        {/* Grid de 4 Cards (1 por ponto) */}
-        {!loadingInitial && (
-          <main className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-            {pontosList.map((ponto) => {
-              const estado = pontosEstados[ponto.id] || {
-                ponto,
-                loading: true,
-                error: null,
-                data: null,
-                currentHourData: null,
-                statusSemaforo: null,
-              }
-
-              return (
+        {loadingGeral ? (
+          <LoadingState variant="cards" count={4} />
+        ) : (
+          <div className="space-y-6">
+            {/* Grid dos 4 Pontos Canônicos */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pontosFixosEstados.map((estado) => (
                 <PontoCard
-                  key={ponto.id}
+                  key={estado.ponto.slug || estado.ponto.id}
                   estado={estado}
-                  onRetry={() => loadDadosPonto(ponto, perfil?.id || 'lancha')}
+                  onRetry={handleRetryPonto}
                 />
-              )
-            })}
-          </main>
-        )}
-      </div>
+              ))}
+            </div>
 
-      {/* Rodapé Oficial */}
-      <footer className="w-full border-t border-zinc-800/80 bg-[#070a0f] py-4 px-4 text-center mt-6">
-        <p className="text-xs text-zinc-400 font-normal tracking-wide">
-          Dados: Open-Meteo · maré modelada, não substitui a Tábua da DHN
-        </p>
-      </footer>
-    </PullToRefresh>
+            {/* Seção dos Pontos Personalizados se houver */}
+            {pontosCustomEstados.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2 border-b border-zinc-800/60 pb-2">
+                  <span className="text-amber-400 text-sm">⭐</span>
+                  <h3 className="text-sm font-bold text-zinc-200 tracking-tight uppercase tracking-wider">
+                    Meus Pontos Personalizados ({pontosCustomEstados.length})
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pontosCustomEstados.map((estado) => (
+                    <PontoCard key={estado.ponto.id} estado={estado} onRetry={handleRetryPonto} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    </div>
   )
 }
 

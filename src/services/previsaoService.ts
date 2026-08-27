@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { getPontosPersonalizados } from '@/lib/preferencesStorage'
 import {
   Ponto,
   PerfilNavegacao,
@@ -191,14 +192,53 @@ export async function fetchJanelas(
   return data
 }
 
+/**
+ * Busca previsão usando coordenadas geográficas diretamente
+ */
+export async function buscarPrevisaoPorCoordenadas(
+  lat: number,
+  lon: number,
+  tipo: string = 'abrigado',
+  nome: string = 'Ponto Personalizado',
+): Promise<PrevisaoPayload> {
+  return fetchPrevisaoPorPonto('', {
+    lat,
+    lon,
+    tipo,
+    nome,
+  })
+}
+
+/**
+ * Busca janelas ideais de navegação usando coordenadas geográficas diretamente
+ */
+export async function buscarJanelasPorCoordenadas(
+  lat: number,
+  lon: number,
+  tipo: string = 'abrigado',
+  perfilId: string = 'lancha',
+  nome: string = 'Ponto Personalizado',
+): Promise<JanelasPayload> {
+  return fetchJanelas('', perfilId, {
+    lat,
+    lon,
+    tipo,
+    nome,
+  })
+}
+
 export async function fetchBriefingComandante(
   perfilId: string,
   dispositivoUuid?: string,
+  pontosPersonalizados?: Array<{ lat: number; lon: number; tipo: string; nome: string }>,
 ): Promise<{ texto: string; gerado_em: string }> {
   const backendUrl = pb.baseUrl || ''
   let url = `${backendUrl}/backend/v1/briefing?perfil_id=${encodeURIComponent(perfilId)}`
   if (dispositivoUuid) {
     url += `&dispositivo_uuid=${encodeURIComponent(dispositivoUuid)}`
+  }
+  if (pontosPersonalizados && pontosPersonalizados.length > 0) {
+    url += `&pontos_custom=${encodeURIComponent(JSON.stringify(pontosPersonalizados))}`
   }
 
   const res = await fetch(url)
@@ -747,4 +787,46 @@ export function calcularRotasNauticas(
   }
 
   return rotas
+}
+
+/**
+ * Monta lista de todos os destinos possíveis para cálculo de rotas
+ * (os 4 pontos fixos canônicos + os pontos personalizados do usuário, exceto o ponto atual)
+ */
+export function obterTodosDestinosParaRotas(
+  currentSlugOrId: string,
+): Array<{ slug: string; nome: string; lat: number; lon: number }> {
+  const destinos: Array<{ slug: string; nome: string; lat: number; lon: number }> = []
+
+  // 1. Adiciona os 4 fixos
+  for (const pf of PONTOS_DISPONIVEIS) {
+    if (pf.slug !== currentSlugOrId) {
+      destinos.push({
+        slug: pf.slug,
+        nome: pf.nomeCurto,
+        lat: pf.lat,
+        lon: pf.lon,
+      })
+    }
+  }
+
+  // 2. Adiciona os pontos personalizados do localStorage
+  try {
+    const customList = getPontosPersonalizados()
+    for (const cp of customList) {
+      const customSlug = `custom-${cp.id}`
+      if (customSlug !== currentSlugOrId && cp.id !== currentSlugOrId) {
+        destinos.push({
+          slug: customSlug,
+          nome: cp.nome,
+          lat: cp.lat,
+          lon: cp.lon,
+        })
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  return destinos
 }

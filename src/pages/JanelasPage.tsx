@@ -1,406 +1,504 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Ponto, JanelasPayload, JanelaNavegacao } from '@/types/nautico'
+import { usePerfil } from '@/contexts/PerfilContext'
 import {
   fetchPontos,
   fetchJanelas,
-  formatPontoNome,
   formatTipoPonto,
-  formatarJanelaBadge,
+  formatPontoNome,
+  getProximaJanela,
   PONTOS_DISPONIVEIS,
 } from '@/services/previsaoService'
-import { usePerfil } from '@/contexts/PerfilContext'
+import { getPontosPersonalizados } from '@/lib/preferencesStorage'
+import { Ponto, JanelasPayload, JanelaNavegacao } from '@/types/nautico'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingState } from '@/components/ui/LoadingState'
-import { EmptyState } from '@/components/ui/EmptyState'
-import { ErrorState } from '@/components/ui/ErrorState'
-import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import {
-  Anchor,
   Compass,
-  CalendarRange,
-  RotateCw,
   Clock,
+  RefreshCw,
+  Info,
+  Calendar,
   AlertTriangle,
   ChevronRight,
-  ShieldAlert,
-  Sparkles,
-  Ship,
-  Sailboat,
-  Zap,
+  Sun,
+  MapPin,
+  Flame,
 } from 'lucide-react'
 
-interface PontoJanelasEstado {
+interface PontoComJanelas {
   ponto: Ponto
+  janelasPayload: JanelasPayload | null
   loading: boolean
   error: string | null
-  data: JanelasPayload | null
+  proximaJanela: JanelaNavegacao | null
+  isPersonalizado?: boolean
 }
 
 export const JanelasPage: React.FC = () => {
   const navigate = useNavigate()
-  const { perfil, perfis, setPerfil } = usePerfil()
-  const [pontosEstados, setPontosEstados] = useState<Record<string, PontoJanelasEstado>>({})
-  const [pontosList, setPontosList] = useState<Ponto[]>([])
-  const [loadingInitial, setLoadingInitial] = useState<boolean>(true)
-  const [isRefreshingAll, setIsRefreshingAll] = useState<boolean>(false)
+  const { perfil } = usePerfil()
 
-  // Carrega janelas de um ponto específico
-  const carregarJanelasPonto = useCallback(async (ponto: Ponto, perfilId: string) => {
-    setPontosEstados((prev) => ({
-      ...prev,
-      [ponto.id]: {
-        ponto,
-        loading: true,
-        error: null,
-        data: prev[ponto.id]?.data || null,
+  const [pontosJanelas, setPontosJanelas] = useState<PontoComJanelas[]>([])
+  const [loadingGeral, setLoadingGeral] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedPontoId, setSelectedPontoId] = useState<string>('todos')
+
+  const SLUG_ORDER = ['angra', 'abraao', 'paraty', 'juatinga']
+
+  /**
+   * Carrega janelas de um ponto (fixo ou custom)
+   */
+  const carregarJanelasPonto = useCallback(
+    async (
+      ponto: Ponto,
+      perfilId: string,
+      customOpts?: {
+        lat: number
+        lon: number
+        tipo: string
+        nome?: string
+        isPersonalizado?: boolean
       },
-    }))
-
-    try {
-      const data = await fetchJanelas(ponto.id, perfilId)
-      setPontosEstados((prev) => ({
-        ...prev,
-        [ponto.id]: {
-          ponto,
-          loading: false,
-          error: null,
-          data,
-        },
-      }))
-    } catch (err: any) {
-      console.error(`Erro ao buscar janelas de ${ponto.nome}:`, err)
-      setPontosEstados((prev) => ({
-        ...prev,
-        [ponto.id]: {
-          ponto,
-          loading: false,
-          error: err?.message || 'Falha ao buscar janelas ideais',
-          data: null,
-        },
-      }))
-    }
-  }, [])
-
-  // Carrega todos os pontos e janelas
-  const carregarTodos = useCallback(async () => {
-    try {
-      let pontos: Ponto[] = []
+    ): Promise<PontoComJanelas> => {
+      const isCustom = !!customOpts?.isPersonalizado || (ponto.id && ponto.id.startsWith('custom-'))
       try {
-        pontos = await fetchPontos()
-      } catch (err) {
-        console.warn('Fallback para pontos padrão:', err)
-      }
+        const payload = isCustom
+          ? await fetchJanelas(
+              '',
+              perfilId,
+              customOpts
+                ? {
+                    lat: customOpts.lat,
+                    lon: customOpts.lon,
+                    tipo: customOpts.tipo,
+                    nome: customOpts.nome,
+                  }
+                : undefined,
+            )
+          : await fetchJanelas(ponto.slug || ponto.id, perfilId)
 
-      if (!pontos || pontos.length === 0) {
-        pontos = [
-          {
-            id: 'angra',
-            slug: 'angra',
-            nome: 'angra',
-            lat: -23.005,
-            lon: -44.318,
-            tipo: 'abrigado',
-          },
-          { id: 'abraao', slug: 'abraao', nome: 'abraao', lat: -23.14, lon: -44.168, tipo: 'semi' },
-          {
-            id: 'paraty',
-            slug: 'paraty',
-            nome: 'paraty',
-            lat: -23.22,
-            lon: -44.7,
-            tipo: 'abrigado',
-          },
-          {
-            id: 'juatinga',
-            slug: 'juatinga',
-            nome: 'juatinga',
-            lat: -23.3,
-            lon: -44.5,
-            tipo: 'aberto',
-          },
-        ]
-      }
-
-      setPontosList(pontos)
-      const initialMap: Record<string, PontoJanelasEstado> = {}
-      pontos.forEach((p) => {
-        initialMap[p.id] = {
-          ponto: p,
-          loading: true,
+        const proxima = payload.janelas ? getProximaJanela(payload.janelas) : null
+        return {
+          ponto,
+          janelasPayload: payload,
+          loading: false,
           error: null,
-          data: null,
+          proximaJanela: proxima,
+          isPersonalizado: isCustom,
         }
-      })
-      setPontosEstados(initialMap)
-      setLoadingInitial(false)
+      } catch (err: any) {
+        console.error(`Erro ao carregar janelas para o ponto ${ponto.nome}:`, err)
+        return {
+          ponto,
+          janelasPayload: null,
+          loading: false,
+          error: err?.message || 'Falha ao obter janelas deste ponto',
+          proximaJanela: null,
+          isPersonalizado: isCustom,
+        }
+      }
+    },
+    [],
+  )
 
-      const activePerfilId = perfil?.id || 'lancha'
-      await Promise.all(pontos.map((p) => carregarJanelasPonto(p, activePerfilId)))
-    } catch (err) {
-      setLoadingInitial(false)
-    }
-  }, [carregarJanelasPonto, perfil?.id])
+  /**
+   * Carrega todos os pontos com suas janelas
+   */
+  const carregarTodasJanelas = useCallback(
+    async (isManual = false) => {
+      if (isManual) {
+        setRefreshing(true)
+      } else {
+        setLoadingGeral(true)
+      }
+
+      try {
+        let pontosFixos: Ponto[] = []
+        try {
+          pontosFixos = await fetchPontos()
+        } catch {
+          pontosFixos = PONTOS_DISPONIVEIS.map((p) => ({
+            id: p.slug,
+            nome: p.nomeCurto,
+            lat: p.lat,
+            lon: p.lon,
+            tipo: p.tipo as any,
+            slug: p.slug,
+            descricao_abrigo: p.nomeCompleto,
+          }))
+        }
+
+        const pontosFixosOrdenados = [...pontosFixos].sort((a, b) => {
+          const idxA = SLUG_ORDER.indexOf(a.slug || a.nome.toLowerCase())
+          const idxB = SLUG_ORDER.indexOf(b.slug || b.nome.toLowerCase())
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return a.nome.localeCompare(b.nome)
+        })
+
+        // Pontos Personalizados
+        const customPontosStorage = getPontosPersonalizados()
+        const pontosCustomFormatados: Array<{
+          ponto: Ponto
+          customOpts: {
+            lat: number
+            lon: number
+            tipo: string
+            nome: string
+            isPersonalizado: boolean
+          }
+        }> = customPontosStorage.map((cp) => ({
+          ponto: {
+            id: `custom-${cp.id}`,
+            nome: cp.nome,
+            lat: cp.lat,
+            lon: cp.lon,
+            tipo: cp.tipo as any,
+            slug: `custom-${cp.id}`,
+            descricao_abrigo: 'Ponto Personalizado',
+          },
+          customOpts: {
+            lat: cp.lat,
+            lon: cp.lon,
+            tipo: cp.tipo,
+            nome: cp.nome,
+            isPersonalizado: true,
+          },
+        }))
+
+        const perfilId = perfil?.id || 'lancha'
+
+        const promessasFixos = pontosFixosOrdenados.map((p) => carregarJanelasPonto(p, perfilId))
+        const promessasCustom = pontosCustomFormatados.map(({ ponto, customOpts }) =>
+          carregarJanelasPonto(ponto, perfilId, customOpts),
+        )
+
+        const resultados = await Promise.all([...promessasFixos, ...promessasCustom])
+        setPontosJanelas(resultados)
+      } catch (err: any) {
+        console.error('Erro ao buscar janelas dos pontos:', err)
+      } finally {
+        setLoadingGeral(false)
+        setRefreshing(false)
+      }
+    },
+    [carregarJanelasPonto, perfil?.id],
+  )
 
   useEffect(() => {
-    carregarTodos()
-  }, [carregarTodos])
+    carregarTodasJanelas()
+  }, [carregarTodasJanelas])
 
-  // Recarrega quando o perfil muda
-  useEffect(() => {
-    if (pontosList.length > 0 && perfil?.id) {
-      pontosList.forEach((p) => carregarJanelasPonto(p, perfil.id))
-    }
-  }, [perfil?.id, carregarJanelasPonto, pontosList])
+  // Formatação de data e período para janela
+  const formatJanelaExtensa = (inicioIso: string, fimIso: string) => {
+    try {
+      const inicio = new Date(inicioIso)
+      const fim = new Date(fimIso)
 
-  const handleRefreshAll = async () => {
-    setIsRefreshingAll(true)
-    const activePerfilId = perfil?.id || 'lancha'
-    await Promise.all(pontosList.map((p) => carregarJanelasPonto(p, activePerfilId)))
-    setIsRefreshingAll(false)
-  }
+      const diasSemana = [
+        'Domingo',
+        'Segunda-feira',
+        'Terça-feira',
+        'Quarta-feira',
+        'Quinta-feira',
+        'Sexta-feira',
+        'Sábado',
+      ]
+      const diaNome = diasSemana[inicio.getDay()]
+      const diaNum = String(inicio.getDate()).padStart(2, '0')
+      const mesNum = String(inicio.getMonth() + 1).padStart(2, '0')
 
-  const getTipoBadgeColor = (tipo: string) => {
-    switch (tipo) {
-      case 'abrigado':
-        return 'bg-blue-950/70 text-blue-300 border-blue-800/60'
-      case 'semi':
-        return 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60'
-      case 'aberto':
-        return 'bg-slate-800 text-slate-300 border-slate-700'
-      default:
-        return 'bg-secondary text-secondary-foreground'
-    }
-  }
+      const horaIni = String(inicio.getHours()).padStart(2, '0') + ':00'
+      const horaFim = String(fim.getHours()).padStart(2, '0') + ':00'
 
-  const getScoreVisual = (score: number) => {
-    if (score >= 85) {
       return {
-        bg: 'bg-emerald-950/60',
-        text: 'text-emerald-400',
-        border: 'border-emerald-700/60',
-        badge: 'Excelente',
+        dataTitulo: `${diaNome}, ${diaNum}/${mesNum}`,
+        horario: `${horaIni} às ${horaFim}`,
+      }
+    } catch {
+      return {
+        dataTitulo: inicioIso.slice(0, 10),
+        horario: `${inicioIso.slice(11, 16)} às ${fimIso.slice(11, 16)}`,
       }
     }
-    if (score >= 70) {
-      return {
-        bg: 'bg-teal-950/60',
-        text: 'text-teal-400',
-        border: 'border-teal-700/60',
-        badge: 'Boa',
-      }
-    }
-    return {
-      bg: 'bg-amber-950/60',
-      text: 'text-amber-400',
-      border: 'border-amber-700/60',
-      badge: 'Marginal',
-    }
   }
 
-  const getPerfilIcon = (nome: string) => {
-    const n = nome.toLowerCase()
-    if (n.includes('veleiro') || n.includes('vela')) return <Sailboat className="w-3.5 h-3.5" />
-    if (n.includes('jet')) return <Zap className="w-3.5 h-3.5" />
-    return <Ship className="w-3.5 h-3.5" />
+  // Cor do score
+  const getScoreColor = (score: number) => {
+    if (score >= 85) return 'text-emerald-400 bg-emerald-950/60 border-emerald-700'
+    if (score >= 70) return 'text-teal-400 bg-teal-950/60 border-teal-700'
+    if (score >= 50) return 'text-amber-400 bg-amber-950/60 border-amber-700'
+    return 'text-red-400 bg-red-950/60 border-red-700'
   }
+
+  // Filtragem por ponto selecionado
+  const pontosExibidos =
+    selectedPontoId === 'todos'
+      ? pontosJanelas
+      : pontosJanelas.filter(
+          (pj) =>
+            pj.ponto.id === selectedPontoId ||
+            pj.ponto.slug === selectedPontoId ||
+            pj.ponto.nome.toLowerCase() === selectedPontoId.toLowerCase(),
+        )
 
   return (
-    <PullToRefresh
-      onRefresh={handleRefreshAll}
-      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6"
-    >
-      <div className="w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
-        {/* Header da Página */}
-        <header className="mb-6 space-y-4 border-b border-zinc-800/80 pb-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-700/60 flex items-center justify-center text-cyan-300">
-                  <CalendarRange className="w-4 h-4" />
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                  Janelas Ideais de Navegação
-                </h1>
-              </div>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-1 flex items-center gap-1.5 font-medium">
-                <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                Previsão de 72h (3 dias) com score ≥ 70 para {perfil?.nome || 'sua embarcação'}
-              </p>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshAll}
-              disabled={isRefreshingAll || loadingInitial}
-              className="bg-[#121820] border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 text-xs gap-1.5 shrink-0"
-              title="Atualizar janelas"
-            >
-              <RotateCw className={`w-3.5 h-3.5 ${isRefreshingAll ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Atualizar</span>
-            </Button>
+    <div className="space-y-6 pb-12">
+      {/* Cabeçalho da Página */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Compass className="w-6 h-6 text-cyan-400" />
+            <h1 className="text-2xl font-black text-white tracking-tight">Janelas de Navegação</h1>
           </div>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+            Previsão detalhada de períodos ideais diurnos (≥70 pts) para{' '}
+            <span className="text-cyan-300 font-semibold uppercase">
+              {perfil?.nome || 'LANCHA'}
+            </span>{' '}
+            nas próximas 72 horas.
+          </p>
+        </div>
 
-          {/* Seletor Segmentado de Perfil */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#11161d] p-2 rounded-xl border border-zinc-800/80">
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Perfil de Embarcação:
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#0a0e14] p-1 rounded-lg border border-zinc-800/90 overflow-x-auto">
-              {(perfis.length > 0
-                ? perfis
-                : [
-                    { id: 'lancha', nome: 'lancha' },
-                    { id: 'veleiro', nome: 'veleiro' },
-                    { id: 'jet', nome: 'jet' },
-                  ]
-              ).map((p) => {
-                const isSelected =
-                  perfil?.id === p.id || perfil?.nome?.toLowerCase() === p.nome?.toLowerCase()
-                const label = p.nome.charAt(0).toUpperCase() + p.nome.slice(1)
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => carregarTodasJanelas(true)}
+            disabled={refreshing || loadingGeral}
+            className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-9"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-400' : ''}`}
+            />
+            <span>Recalcular Janelas</span>
+          </Button>
+        </div>
+      </div>
 
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setPerfil(p.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                      isSelected
-                        ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/80 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 border border-transparent'
-                    }`}
-                  >
-                    {getPerfilIcon(p.nome)}
-                    <span>{label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </header>
+      {/* Seletor Rápido de Ponto (Filtro) */}
+      {!loadingGeral && pontosJanelas.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          <Button
+            variant={selectedPontoId === 'todos' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedPontoId('todos')}
+            className={`text-xs h-8 px-3 rounded-full shrink-0 font-medium ${
+              selectedPontoId === 'todos'
+                ? 'bg-cyan-700 hover:bg-cyan-600 text-white border-none'
+                : 'bg-[#11161d] border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            Todos os Pontos ({pontosJanelas.length})
+          </Button>
+          {pontosJanelas.map((pj) => {
+            const isSel =
+              selectedPontoId === pj.ponto.id ||
+              selectedPontoId === pj.ponto.slug ||
+              selectedPontoId === pj.ponto.nome
+            const isCustom = pj.isPersonalizado || pj.ponto.id.startsWith('custom-')
+            const nomeFormatado = isCustom ? pj.ponto.nome : formatPontoNome(pj.ponto.nome)
+            const countJanelas = pj.janelasPayload?.janelas?.length ?? 0
 
-        {/* Lista Organizada por Ponto */}
-        <main className="space-y-6 flex-1">
-          {pontosList.map((ponto) => {
-            const estado = pontosEstados[ponto.id] || {
-              ponto,
-              loading: true,
-              error: null,
-              data: null,
-            }
-            const nomeExibicao = formatPontoNome(ponto.nome)
-            const tipoFormatado = formatTipoPonto(ponto.tipo)
-            const janelas = estado.data?.janelas || []
+            return (
+              <Button
+                key={pj.ponto.id || pj.ponto.slug}
+                variant={isSel ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPontoId(pj.ponto.slug || pj.ponto.id)}
+                className={`text-xs h-8 px-3 rounded-full shrink-0 font-medium gap-1.5 ${
+                  isSel
+                    ? 'bg-cyan-700 hover:bg-cyan-600 text-white border-none'
+                    : 'bg-[#11161d] border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                {isCustom && <span className="text-amber-400 text-xs">⭐</span>}
+                {nomeFormatado}
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    countJanelas > 0
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/80'
+                      : 'bg-zinc-800 text-zinc-500'
+                  }`}
+                >
+                  {countJanelas}
+                </span>
+              </Button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Card Informativo sobre Critérios */}
+      <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-cyan-200 text-xs flex items-start gap-2.5">
+        <Info className="w-4 h-4 shrink-0 mt-0.5 text-cyan-400" />
+        <div className="space-y-0.5 leading-relaxed">
+          <p className="font-semibold text-white">Como funcionam as janelas ideais?</p>
+          <p className="text-zinc-300">
+            Uma janela é considerada ideal quando atinge <strong>score ≥ 70</strong> de forma
+            contínua por no mínimo <strong>3 horas diurnas</strong> (entre nascer e pôr do sol),
+            respeitando vento, rajadas, ondas e chuva para o perfil{' '}
+            <span className="uppercase text-cyan-300 font-mono">{perfil?.nome}</span>.
+          </p>
+        </div>
+      </div>
+
+      {/* Lista de Janelas por Ponto */}
+      {loadingGeral ? (
+        <LoadingState variant="cards" count={3} />
+      ) : (
+        <div className="space-y-6">
+          {pontosExibidos.map((pj) => {
+            const isCustom = pj.isPersonalizado || pj.ponto.id.startsWith('custom-')
+            const nomeExibicao = isCustom ? pj.ponto.nome : formatPontoNome(pj.ponto.nome)
+            const tipoFormatado = formatTipoPonto(pj.ponto.tipo)
+            const janelas = pj.janelasPayload?.janelas || []
+            const slugDestino = isCustom
+              ? pj.ponto.id.startsWith('custom-')
+                ? pj.ponto.id
+                : `custom-${pj.ponto.id}`
+              : pj.ponto.slug || pj.ponto.nome.toLowerCase()
 
             return (
               <Card
-                key={ponto.id}
+                key={pj.ponto.id || pj.ponto.slug}
                 className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100 overflow-hidden"
               >
                 {/* Header do Ponto */}
-                <CardHeader className="pb-3 border-b border-zinc-800/80 bg-[#0d1218]/80">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <CardTitle className="text-base sm:text-lg font-bold text-white">
+                <CardHeader className="pb-3 border-b border-zinc-800/80 bg-[#0d1218]/80 flex flex-row items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                        {isCustom && <span className="text-amber-400">⭐</span>}
+                        <MapPin className="w-4 h-4 text-cyan-400" />
                         {nomeExibicao}
                       </CardTitle>
                       <Badge
                         variant="outline"
-                        className={`text-xs px-2 py-0.5 border ${getTipoBadgeColor(ponto.tipo)}`}
+                        className="text-[10px] px-2 py-0 border-zinc-700 bg-zinc-800/80 text-zinc-300"
                       >
                         {tipoFormatado}
                       </Badge>
                     </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
-                        navigate(`/ponto/${slugDestino}`)
-                      }}
-                      className="text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40 gap-1 p-1 sm:px-2.5"
-                    >
-                      <span>Ver detalhes</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Button>
+                    <p className="text-xs text-zinc-400">
+                      {janelas.length > 0
+                        ? `${janelas.length} ${
+                            janelas.length === 1
+                              ? 'janela ideal detectada'
+                              : 'janelas ideais detectadas'
+                          }`
+                        : 'Nenhuma janela contínua de 3h diurna com score ≥ 70'}
+                    </p>
                   </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/ponto/${slugDestino}`)}
+                    className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40 text-xs gap-1 h-8"
+                  >
+                    Ver Ponto
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Button>
                 </CardHeader>
 
-                <CardContent className="p-4 sm:p-5">
-                  {/* Skeleton Loading */}
-                  {estado.loading && <LoadingState variant="cards" count={2} />}
-
-                  {/* Erro */}
-                  {!estado.loading && estado.error && (
-                    <ErrorState
-                      message={estado.error}
-                      onRetry={() => carregarJanelasPonto(ponto, perfil?.id || 'lancha')}
-                    />
+                <CardContent className="p-4 sm:p-5 space-y-4">
+                  {/* Tratamento de Erro */}
+                  {pj.error && (
+                    <div className="p-3 rounded-lg bg-red-950/30 border border-red-800/40 text-red-300 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{pj.error}</span>
+                    </div>
                   )}
 
-                  {/* Sem Janelas */}
-                  {!estado.loading && !estado.error && janelas.length === 0 && (
-                    <EmptyState
-                      icon={<ShieldAlert className="w-6 h-6 text-zinc-500" />}
-                      title="Sem janelas ideais nos próximos 3 dias"
-                      description={`As condições meteorológicas ficam abaixo do limiar de segurança (score < 70) para o perfil ${perfil?.nome}.`}
-                    />
+                  {/* Sem Janelas Encontradas */}
+                  {!pj.error && janelas.length === 0 && (
+                    <div className="p-5 rounded-xl bg-[#161c24] border border-zinc-800/80 text-center space-y-2">
+                      <Clock className="w-8 h-8 text-zinc-600 mx-auto" />
+                      <p className="text-sm font-semibold text-zinc-300">
+                        Condições desfavoráveis para o perfil {perfil?.nome}
+                      </p>
+                      <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                        O vento, as ondas ou as rajadas previstas para as próximas 72 horas excedem
+                        os limites seguros de navegação contínua neste ponto.
+                      </p>
+                    </div>
                   )}
 
-                  {/* Lista de Janelas Ideais */}
-                  {!estado.loading && !estado.error && janelas.length > 0 && (
+                  {/* Lista de Janelas Válidas */}
+                  {!pj.error && janelas.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {janelas.map((j, idx) => {
-                        const scoreStyle = getScoreVisual(j.score_medio)
-                        const horarioTexto = formatarJanelaBadge(j.inicio, j.fim)
+                        const { dataTitulo, horario } = formatJanelaExtensa(j.inicio, j.fim)
+                        const isMelhor =
+                          idx === 0 ||
+                          j.score_medio === Math.max(...janelas.map((item) => item.score_medio))
 
                         return (
                           <div
                             key={idx}
-                            className="bg-[#161c24] border border-zinc-800/90 rounded-xl p-3.5 flex flex-col justify-between gap-3 hover:border-emerald-700/50 transition-colors"
+                            className={`p-3.5 rounded-xl border flex flex-col justify-between gap-3 relative transition-all ${
+                              isMelhor
+                                ? 'bg-gradient-to-br from-[#16212e] to-[#121922] border-cyan-700/60 shadow-[0_0_15px_rgba(6,182,212,0.1)]'
+                                : 'bg-[#161c24] border-zinc-800 hover:border-zinc-700'
+                            }`}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-sm">
-                                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                                  <span>{horarioTexto}</span>
-                                </div>
-                                <div className="flex items-center gap-1 text-xs text-zinc-400 mt-1">
-                                  <Clock className="w-3 h-3 text-zinc-500" />
-                                  <span>Duração: {j.duracao_horas} horas consecutivas</span>
-                                </div>
+                            {isMelhor && (
+                              <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
+                                <Badge className="bg-cyan-900 text-cyan-200 border-cyan-700 text-[9px] uppercase px-1.5 py-0 flex items-center gap-1 font-bold">
+                                  <Flame className="w-3 h-3 text-amber-400" />
+                                  Melhor Janela
+                                </Badge>
+                              </div>
+                            )}
+
+                            {/* Informações da Janela */}
+                            <div className="space-y-2">
+                              <div className="space-y-0.5 pr-14">
+                                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                                  {dataTitulo}
+                                </span>
+                                <p className="text-sm font-black text-cyan-300 font-mono flex items-center gap-1.5">
+                                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                                  {horario}
+                                </p>
                               </div>
 
-                              {/* Score Médio */}
-                              <div
-                                className={`px-2.5 py-1 rounded-lg border flex flex-col items-center justify-center shrink-0 ${scoreStyle.bg} ${scoreStyle.border}`}
-                              >
-                                <span className={`text-sm font-black ${scoreStyle.text}`}>
-                                  {j.score_medio}
-                                </span>
-                                <span className="text-[9px] uppercase tracking-wider text-zinc-400 font-bold">
-                                  Score
-                                </span>
+                              <div className="flex items-center gap-2 pt-1 border-t border-zinc-800/80">
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] text-zinc-400">Duração</span>
+                                  <p className="text-xs font-bold text-white font-mono">
+                                    {j.duracao_horas} horas
+                                  </p>
+                                </div>
+                                <div className="h-6 w-px bg-zinc-800 mx-1"></div>
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] text-zinc-400">Fator Principal</span>
+                                  <p className="text-xs font-semibold text-zinc-300 capitalize truncate max-w-[120px]">
+                                    {j.fator_limitante || 'Nenhum'}
+                                  </p>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Fator limitante / Atenção */}
-                            <div className="pt-2 border-t border-zinc-800/80 text-[11px] flex items-center justify-between text-zinc-400">
-                              <span className="text-zinc-500">Ponto de atenção:</span>
-                              {j.fator_limitante ? (
-                                <span className="font-medium text-amber-300">
-                                  {j.fator_limitante_desc || j.fator_limitante}
-                                </span>
-                              ) : (
-                                <span className="font-medium text-emerald-300">
-                                  Condições ideais
-                                </span>
-                              )}
+                            {/* Score Médio da Janela */}
+                            <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+                              <span className="text-[11px] text-zinc-400 font-medium">
+                                Score Médio
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`font-mono font-black text-xs px-2.5 py-0.5 border ${getScoreColor(
+                                  j.score_medio,
+                                )}`}
+                              >
+                                {j.score_medio} pts
+                              </Badge>
                             </div>
                           </div>
                         )
@@ -411,16 +509,9 @@ export const JanelasPage: React.FC = () => {
               </Card>
             )
           })}
-        </main>
-      </div>
-
-      {/* Rodapé Oficial */}
-      <footer className="w-full border-t border-zinc-800/80 bg-[#070a0f] py-4 px-4 text-center mt-6">
-        <p className="text-xs text-zinc-400 font-normal tracking-wide">
-          Dados: Open-Meteo · maré modelada, não substitui a Tábua da DHN
-        </p>
-      </footer>
-    </PullToRefresh>
+        </div>
+      )}
+    </div>
   )
 }
 

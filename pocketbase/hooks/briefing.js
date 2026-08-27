@@ -2,11 +2,14 @@ routerAdd('GET', '/backend/v1/briefing', (e) => {
   const query = e.requestInfo().query || {}
   const perfilId = query['perfil_id'] || 'lancha'
   const dispositivoUuid = query['dispositivo_uuid'] || ''
+  const pontosCustomParam = query['pontos_custom'] || ''
 
-  // 1. Busca os 4 pontos (Angra dos Reis, Abraão, Paraty, Juatinga)
-  const pontosRecords = $app.findRecordsByFilter('pontos', '', 'created', 10, 0)
-  if (!pontosRecords || pontosRecords.length === 0) {
-    return e.json(500, { error: 'Nenhum ponto de navegação cadastrado' })
+  // 1. Busca os 4 pontos fixos (Angra dos Reis, Abraão, Paraty, Juatinga)
+  let pontosRecords = []
+  try {
+    pontosRecords = $app.findRecordsByFilter('pontos', '', 'created', 10, 0) || []
+  } catch (errPontos) {
+    pontosRecords = []
   }
 
   // 2. Busca o perfil de navegação
@@ -40,13 +43,61 @@ routerAdd('GET', '/backend/v1/briefing', (e) => {
   const resumoPontos = []
   let alertaFrenteFriaDetectado = false
 
+  // Lista unificada de pontos a avaliar no briefing (fixos + personalizados)
+  const todosPontosParaAvaliar = []
+
   for (let pIdx = 0; pIdx < pontosRecords.length; pIdx++) {
     const ponto = pontosRecords[pIdx]
+    todosPontosParaAvaliar.push({
+      id: ponto.id,
+      nome: ponto.get('nome'),
+      tipo: ponto.get('tipo') || 'abrigado',
+      lat: ponto.get('lat'),
+      lon: ponto.get('lon'),
+      isPersonalizado: false,
+    })
+  }
+
+  // Se vierem pontos customizados via query param
+  if (pontosCustomParam) {
+    try {
+      const parsedCustom = JSON.parse(pontosCustomParam)
+      if (Array.isArray(parsedCustom)) {
+        for (let cIdx = 0; cIdx < parsedCustom.length; cIdx++) {
+          const cp = parsedCustom[cIdx]
+          if (cp && cp.lat !== undefined && cp.lon !== undefined) {
+            let t = (cp.tipo || 'abrigado').toLowerCase()
+            if (t === 'semi-abrigado' || t === 'semi') t = 'semi'
+            else if (t === 'mar aberto' || t === 'aberto') t = 'aberto'
+            else t = 'abrigado'
+
+            todosPontosParaAvaliar.push({
+              id: 'custom-' + cIdx,
+              nome: cp.nome || 'Ponto Personalizado',
+              tipo: t,
+              lat: Number(cp.lat),
+              lon: Number(cp.lon),
+              isPersonalizado: true,
+            })
+          }
+        }
+      }
+    } catch (parseErr) {
+      console.log('Erro ao fazer parse de pontos_custom no briefing:', parseErr)
+    }
+  }
+
+  if (todosPontosParaAvaliar.length === 0) {
+    return e.json(500, { error: 'Nenhum ponto de navegação disponível para gerar o briefing' })
+  }
+
+  for (let pIdx = 0; pIdx < todosPontosParaAvaliar.length; pIdx++) {
+    const ponto = todosPontosParaAvaliar[pIdx]
     const pId = ponto.id
-    const pNome = ponto.get('nome')
-    const pTipo = ponto.get('tipo') || 'abrigado'
-    const lat = ponto.get('lat')
-    const lon = ponto.get('lon')
+    const pNome = ponto.nome
+    const pTipo = ponto.tipo
+    const lat = ponto.lat
+    const lon = ponto.lon
 
     // Consulta previsão 1 dia (para dados atuais)
     let weatherData = null

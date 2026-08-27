@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { usePerfil } from '@/contexts/PerfilContext'
+import { fetchBriefingComandante } from '@/services/previsaoService'
+import { getStoredPreferences, setStoredPreferences } from '@/lib/preferencesStorage'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  Compass,
+  RefreshCw,
+  Sparkles,
+  Clock,
+  Send,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
   DialogContent,
@@ -17,108 +25,59 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Anchor,
-  RotateCw,
-  Share2,
-  Sparkles,
-  AlertCircle,
-  Copy,
-  Mail,
-  Smartphone,
-  MessageCircle,
-  Loader2,
-  Check,
-} from 'lucide-react'
-import { fetchBriefingComandante, enviarBriefingEmail } from '@/services/previsaoService'
-import { LoadingState } from '@/components/ui/LoadingState'
-import { useToast } from '@/hooks/use-toast'
 
-export interface BriefingCardProps {
-  perfilId: string
-  deviceId: string
-  ultimoBriefingInicial?: string
-  updatedAtInicial?: string
+interface BriefingCardProps {
   onBriefingUpdated?: (texto: string) => void
 }
 
-export const BriefingCard: React.FC<BriefingCardProps> = ({
-  perfilId,
-  deviceId,
-  ultimoBriefingInicial,
-  updatedAtInicial,
-  onBriefingUpdated,
-}) => {
+export const BriefingCard: React.FC<BriefingCardProps> = ({ onBriefingUpdated }) => {
+  const { perfil, deviceId } = usePerfil()
   const { toast } = useToast()
-  const [briefingTexto, setBriefingTexto] = useState<string | null>(null)
-  const [timestamp, setTimestamp] = useState<string | null>(null)
-  const [dataBriefing, setDataBriefing] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(false)
+
+  const [briefingData, setBriefingData] = useState<{ texto: string; gerado_em: string } | null>(
+    null,
+  )
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Estados do Modal de Envio por E-mail
-  const [emailModalOpen, setEmailModalOpen] = useState<boolean>(false)
-  const [emailDestinatario, setEmailDestinatario] = useState<string>('')
-  const [emailEnviando, setEmailEnviando] = useState<boolean>(false)
-  const [emailErro, setEmailErro] = useState<string | null>(null)
+  // Estado do Modal de Envio por E-mail
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
+  const [destinatarioEmail, setDestinatarioEmail] = useState('')
+  const [enviandoEmail, setEnviandoEmail] = useState(false)
+  const [emailEnviadoSucesso, setEmailEnviadoSucesso] = useState(false)
 
-  // Suporte a Web Share API nativo (navigator.share)
-  const [hasNativeShare, setHasNativeShare] = useState<boolean>(false)
-
+  // Carrega briefing do cache do localStorage inicialmente
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      setHasNativeShare(true)
+    const prefs = getStoredPreferences()
+    if (prefs?.ultimo_briefing && prefs.ultimo_briefing.texto) {
+      setBriefingData({
+        texto: prefs.ultimo_briefing.texto,
+        gerado_em: prefs.ultimo_briefing.timestamp || new Date().toISOString(),
+      })
     } else {
-      setHasNativeShare(false)
+      // Se não houver cache, dispara a geração inicial
+      gerarNovoBriefing()
     }
-  }, [])
+  }, [perfil?.id])
 
-  // Ao carregar se já existir ultimoBriefingInicial nas preferências, inicializar
-  useEffect(() => {
-    if (ultimoBriefingInicial && !briefingTexto && !loading) {
-      setBriefingTexto(ultimoBriefingInicial)
-      if (updatedAtInicial) {
-        try {
-          const d = new Date(updatedAtInicial)
-          const hh = String(d.getHours()).padStart(2, '0')
-          const mm = String(d.getMinutes()).padStart(2, '0')
-          setTimestamp(`Gerado às ${hh}:${mm}`)
-          setDataBriefing(d.toLocaleDateString('pt-BR'))
-        } catch {
-          setTimestamp('Briefing salvo')
-          setDataBriefing(new Date().toLocaleDateString('pt-BR'))
-        }
-      } else {
-        setDataBriefing(new Date().toLocaleDateString('pt-BR'))
-      }
-    }
-  }, [ultimoBriefingInicial, updatedAtInicial, briefingTexto, loading])
+  /**
+   * Dispara nova geração de briefing com IA
+   */
+  const gerarNovoBriefing = async () => {
+    if (!perfil?.id) return
 
-  const gerarBriefing = async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetchBriefingComandante(perfilId, deviceId)
-      setBriefingTexto(res.texto)
+      const res = await fetchBriefingComandante(perfil.id, deviceId)
       const nowIso = res.gerado_em || new Date().toISOString()
+      setBriefingData({
+        texto: res.texto,
+        gerado_em: nowIso,
+      })
 
+      // Salva no localStorage como último briefing
       try {
-        const d = new Date(nowIso)
-        const hh = String(d.getHours()).padStart(2, '0')
-        const mm = String(d.getMinutes()).padStart(2, '0')
-        setTimestamp(`Gerado às ${hh}:${mm}`)
-        setDataBriefing(d.toLocaleDateString('pt-BR'))
-      } catch {
-        const now = new Date()
-        setTimestamp(
-          `Gerado às ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
-        )
-        setDataBriefing(now.toLocaleDateString('pt-BR'))
-      }
-
-      // Salva no localStorage
-      try {
-        const { setStoredPreferences } = await import('@/lib/preferencesStorage')
         setStoredPreferences({
           ultimo_briefing: {
             texto: res.texto,
@@ -140,317 +99,199 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
     }
   }
 
-  const formatShareText = () => {
-    if (!briefingTexto) return ''
-    return `⚓ *Clima Náutico — Briefing do Comandante*\n\n${briefingTexto}\n\n🌊 Baía de Ilha Grande`
-  }
-
-  // 1. Web Share nativo
-  const handleNativeShare = async () => {
-    if (!briefingTexto) return
-    const texto = formatShareText()
-    const dataRef = dataBriefing || new Date().toLocaleDateString('pt-BR')
+  // Formatação de data/hora do briefing
+  const formatarHora = (isoDate: string) => {
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `Briefing náutico — ${dataRef}`,
-          text: texto,
-        })
-      }
-    } catch (err: any) {
-      // Se o usuário cancelou o share sheet, ignoramos
-      if (err?.name !== 'AbortError') {
-        console.warn('Erro no navigator.share:', err)
-      }
+      const d = new Date(isoDate)
+      return d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+      })
+    } catch {
+      return isoDate
     }
   }
 
-  // 2. Copiar texto
-  const handleCopiarTexto = async () => {
-    if (!briefingTexto) return
-    const texto = formatShareText()
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(texto)
-      } else {
-        // Fallback antigo caso clipboard API falhe
-        const textarea = document.createElement('textarea')
-        textarea.value = texto
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-      }
-      toast({
-        title: 'Texto copiado!',
-        description: 'O briefing foi copiado para a área de transferência.',
-        duration: 2000,
-      })
-    } catch (err) {
-      console.error('Erro ao copiar texto:', err)
-      toast({
-        title: 'Erro ao copiar',
-        description: 'Não foi possível copiar o texto automaticamente.',
-        variant: 'destructive',
-        duration: 2000,
-      })
-    }
-  }
-
-  // 3. Envio por e-mail
-  const handleAbrirEmailModal = () => {
-    setEmailErro(null)
-    setEmailModalOpen(true)
-  }
-
+  // Envio do Briefing por E-mail
   const handleEnviarEmail = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!briefingTexto) return
+    if (!destinatarioEmail || !briefingData?.texto) return
 
-    const emailTrimmed = emailDestinatario.trim()
-    if (!emailTrimmed) {
-      setEmailErro('Informe o e-mail do destinatário.')
-      return
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailTrimmed)) {
-      setEmailErro('Por favor, insira um e-mail válido.')
-      return
-    }
-
-    setEmailEnviando(true)
-    setEmailErro(null)
-
+    setEnviandoEmail(true)
     try {
-      const dataRef = dataBriefing || new Date().toLocaleDateString('pt-BR')
-      await enviarBriefingEmail(emailTrimmed, briefingTexto, dataRef)
+      const { enviarBriefingEmail } = await import('@/services/previsaoService')
+      await enviarBriefingEmail(destinatarioEmail, briefingData.texto)
 
-      setEmailModalOpen(false)
-      setEmailDestinatario('')
+      setEmailEnviadoSucesso(true)
       toast({
         title: 'Briefing enviado!',
-        description: `O briefing foi enviado com sucesso para ${emailTrimmed}.`,
-        duration: 3000,
+        description: `E-mail enviado com sucesso para ${destinatarioEmail}`,
+        duration: 4000,
       })
-    } catch (err: any) {
-      console.error('Erro ao enviar e-mail:', err)
-      setEmailErro(err?.message || 'Falha ao enviar e-mail. Tente novamente.')
-    } finally {
-      setEmailEnviando(false)
-    }
-  }
 
-  // 4. Compartilhar via WhatsApp (wa.me)
-  const handleShareWhatsApp = () => {
-    if (!briefingTexto) return
-    const texto = formatShareText()
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
-    window.open(url, '_blank', 'noopener')
+      setTimeout(() => {
+        setIsEmailModalOpen(false)
+        setEmailEnviadoSucesso(false)
+        setDestinatarioEmail('')
+      }, 1500)
+    } catch (err: any) {
+      toast({
+        title: 'Erro no envio',
+        description: err?.message || 'Não foi possível enviar o e-mail no momento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoEmail(false)
+    }
   }
 
   return (
-    <Card className="w-full bg-gradient-to-br from-[#0e1622] via-[#0f1724] to-[#0c1219] border-cyan-900/50 shadow-lg text-zinc-100 overflow-hidden relative">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none" />
+    <>
+      <Card className="bg-gradient-to-br from-[#11161d] to-[#0c1219] border-cyan-900/40 shadow-xl overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
 
-      <CardHeader className="pb-3 border-b border-zinc-800/80 bg-[#0d131b]/60 flex flex-row items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-700/60 flex items-center justify-center text-cyan-300 shadow-sm">
-            <Anchor className="w-4 h-4" />
-          </div>
-          <div>
-            <CardTitle className="text-base font-bold text-white flex items-center gap-1.5">
-              <span>Briefing do Comandante</span>
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            </CardTitle>
-            <p className="text-[11px] text-zinc-400 font-medium">
-              Análise tática instantânea com Inteligência Artificial
-            </p>
-          </div>
-        </div>
-
-        {timestamp && !loading && briefingTexto && (
-          <span className="text-[11px] text-zinc-400 bg-zinc-900/80 border border-zinc-800 px-2.5 py-1 rounded-md font-mono shrink-0">
-            {timestamp}
-          </span>
-        )}
-      </CardHeader>
-
-      <CardContent className="p-4 sm:p-5">
-        {/* Loading */}
-        {loading && <LoadingState variant="briefing" text="Comandante avaliando condições..." />}
-
-        {/* Erro */}
-        {!loading && error && (
-          <div className="p-4 rounded-xl bg-red-950/30 border border-red-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 text-red-300 text-xs">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{error}</span>
+        <CardHeader className="pb-3 border-b border-zinc-800/80 bg-[#0d1218]/50 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-cyan-950/80 border border-cyan-800/60 text-cyan-400">
+              <Compass className="w-5 h-5" />
             </div>
+            <div>
+              <CardTitle className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                Briefing do Comandante
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-cyan-400" />
+                  IA Náutica
+                </span>
+              </CardTitle>
+              {briefingData?.gerado_em && (
+                <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                  <Clock className="w-3 h-3 text-zinc-500" />
+                  Atualizado em {formatarHora(briefingData.gerado_em)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
             <Button
+              variant="outline"
               size="sm"
-              onClick={gerarBriefing}
-              className="bg-red-900/60 hover:bg-red-900 border border-red-700 text-white text-xs gap-1.5 self-start sm:self-auto shrink-0"
+              onClick={() => setIsEmailModalOpen(true)}
+              disabled={loading || !briefingData?.texto}
+              className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-8 hidden sm:flex"
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              Tentar de novo
+              <Send className="w-3.5 h-3.5 text-cyan-400" />
+              Enviar por E-mail
             </Button>
-          </div>
-        )}
 
-        {/* Estado Inicial (Sem briefing ainda) */}
-        {!loading && !error && !briefingTexto && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-2">
-            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed max-w-lg">
-              Obtenha um parecer rápido sobre a melhor rota, pontos críticos a evitar e avisos de
-              frente fria para o seu tipo de embarcação.
-            </p>
             <Button
-              onClick={gerarBriefing}
-              className="bg-cyan-900 hover:bg-cyan-800 text-cyan-100 border border-cyan-600/50 gap-2 text-xs font-semibold shadow-md shrink-0 w-full sm:w-auto"
+              variant="outline"
+              size="sm"
+              onClick={gerarNovoBriefing}
+              disabled={loading}
+              className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-8"
+              title="Gerar nova síntese com IA"
             >
-              <Anchor className="w-4 h-4" />
-              Gerar briefing
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+              <span className="hidden sm:inline">Regerar</span>
             </Button>
           </div>
-        )}
+        </CardHeader>
 
-        {/* Sucesso (Exibe Briefing em até 5 linhas) */}
-        {!loading && !error && briefingTexto && (
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-xl bg-[#090d13] border border-cyan-950/80 shadow-inner">
-              <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed whitespace-pre-line font-normal">
-                {briefingTexto}
-              </p>
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {loading && (
+            <div className="py-6 flex flex-col items-center justify-center gap-3 text-zinc-400">
+              <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+              <p className="text-xs">Sintetizando condições meteorológicas e janelas ideais...</p>
             </div>
+          )}
 
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          {error && !loading && (
+            <div className="p-3 rounded-xl bg-red-950/30 border border-red-800/40 text-red-300 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={gerarBriefing}
-                disabled={loading}
-                className="bg-[#121820] border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 text-xs gap-1.5"
+                onClick={gerarNovoBriefing}
+                className="h-7 text-xs text-red-300 hover:text-white"
               >
-                <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                Atualizar briefing
+                Tentar novamente
               </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="bg-cyan-900/90 hover:bg-cyan-800 text-cyan-100 border border-cyan-600/60 text-xs gap-1.5 shadow"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    Compartilhar
-                  </Button>
-                </DropdownMenuTrigger>
-
-                <DropdownMenuContent
-                  align="end"
-                  className="w-56 bg-[#0c1219] border border-cyan-900/70 text-zinc-200 shadow-xl rounded-xl p-1.5"
-                >
-                  {/* Opção 1: Web Share Nativo (celulares/dispositivos com suporte) */}
-                  {hasNativeShare && (
-                    <DropdownMenuItem
-                      onClick={handleNativeShare}
-                      className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
-                    >
-                      <Smartphone className="w-4 h-4 text-cyan-400 shrink-0" />
-                      <span>Compartilhar no dispositivo</span>
-                    </DropdownMenuItem>
-                  )}
-
-                  {/* Opção 2: Copiar texto com Toast */}
-                  <DropdownMenuItem
-                    onClick={handleCopiarTexto}
-                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <Copy className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Copiar texto</span>
-                  </DropdownMenuItem>
-
-                  {/* Opção 3: Enviar por e-mail */}
-                  <DropdownMenuItem
-                    onClick={handleAbrirEmailModal}
-                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-200 hover:text-white hover:bg-cyan-950/60 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Enviar por e-mail</span>
-                  </DropdownMenuItem>
-
-                  {/* Opção 4: WhatsApp — sempre visível */}
-                  <DropdownMenuItem
-                    onClick={handleShareWhatsApp}
-                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-300 hover:text-emerald-100 hover:bg-emerald-950/50 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>WhatsApp</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
-          </div>
-        )}
-      </CardContent>
+          )}
 
-      {/* Modal / Dialog de Envio de E-mail */}
-      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+          {!loading && !error && briefingData?.texto && (
+            <div className="space-y-3">
+              <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans whitespace-pre-line bg-[#080d14]/60 p-4 rounded-xl border border-zinc-800/60 selection:bg-cyan-900">
+                {briefingData.texto}
+              </div>
+
+              {/* Botão Mobile de Enviar por E-mail */}
+              <div className="flex sm:hidden justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEmailModalOpen(true)}
+                  className="w-full bg-[#161c24] border-zinc-700 text-zinc-300 text-xs gap-1.5 h-8"
+                >
+                  <Send className="w-3.5 h-3.5 text-cyan-400" />
+                  Enviar Briefing por E-mail
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal de Enviar Briefing por E-mail */}
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
         <DialogContent className="sm:max-w-md bg-[#0d131b] border-cyan-900/60 text-zinc-100 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
-              <Mail className="w-4 h-4 text-cyan-400" />
-              Enviar briefing por e-mail
+              <Send className="w-4 h-4 text-cyan-400" />
+              Enviar Briefing Náutico
             </DialogTitle>
             <DialogDescription className="text-xs text-zinc-400">
-              O relatório do briefing náutico de {dataBriefing || 'hoje'} será enviado para o
-              destinatário.
+              Encaminhe a síntese de hoje para o comandante, tripulação ou marina.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleEnviarEmail} className="space-y-4 pt-1">
+          <form onSubmit={handleEnviarEmail} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label htmlFor="destinatario-email" className="text-xs font-medium text-zinc-300">
-                E-mail do destinatário
+                E-mail do Destinatário
               </Label>
               <Input
                 id="destinatario-email"
                 type="email"
-                placeholder="exemplo@marina.com.br"
-                value={emailDestinatario}
-                onChange={(e) => {
-                  setEmailDestinatario(e.target.value)
-                  if (emailErro) setEmailErro(null)
-                }}
-                disabled={emailEnviando}
-                className="bg-[#070b10] border-zinc-700/80 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9"
-                autoFocus
+                required
+                placeholder="comandante@marina.com.br"
+                value={destinatarioEmail}
+                onChange={(e) => setDestinatarioEmail(e.target.value)}
+                disabled={enviandoEmail || emailEnviadoSucesso}
+                className="bg-[#070b10] border-zinc-700 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9"
               />
-              {emailErro && (
-                <p className="text-[11px] text-red-400 flex items-center gap-1 mt-1">
-                  <AlertCircle className="w-3 h-3 shrink-0" />
-                  {emailErro}
-                </p>
-              )}
             </div>
 
-            <div className="p-3 bg-[#06090e] rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400 space-y-1">
-              <p className="font-semibold text-zinc-300">
-                Assunto: Briefing náutico — {dataBriefing || new Date().toLocaleDateString('pt-BR')}
-              </p>
-              <p className="line-clamp-2 text-zinc-500 italic">
-                {briefingTexto ? `"${briefingTexto.slice(0, 110)}..."` : ''}
-              </p>
-            </div>
+            {emailEnviadoSucesso && (
+              <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>E-mail enviado com sucesso!</span>
+              </div>
+            )}
 
             <DialogFooter className="gap-2 sm:gap-0 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setEmailModalOpen(false)}
-                disabled={emailEnviando}
+                onClick={() => setIsEmailModalOpen(false)}
+                disabled={enviandoEmail}
                 className="bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs"
               >
                 Cancelar
@@ -458,18 +299,18 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
               <Button
                 type="submit"
                 size="sm"
-                disabled={emailEnviando}
+                disabled={enviandoEmail || !destinatarioEmail || emailEnviadoSucesso}
                 className="bg-cyan-800 hover:bg-cyan-700 text-white border border-cyan-600/50 text-xs gap-1.5 font-medium shadow-md"
               >
-                {emailEnviando ? (
+                {enviandoEmail ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Enviando...
                   </>
                 ) : (
                   <>
-                    <Mail className="w-3.5 h-3.5" />
-                    Enviar
+                    <Send className="w-3.5 h-3.5" />
+                    Enviar agora
                   </>
                 )}
               </Button>
@@ -477,7 +318,7 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
           </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
   )
 }
 

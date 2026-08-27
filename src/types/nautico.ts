@@ -7,6 +7,8 @@ export interface Ponto {
   lat: number
   lon: number
   tipo: TipoPonto
+  descricao_abrigo?: string
+  descricao?: string
   created?: string
   updated?: string
 }
@@ -19,68 +21,68 @@ export interface PerfilNavegacao {
   onda_max_m: number
   periodo_min_s: number | null
   chuva_max_mm_h: number
+  created?: string
+  updated?: string
 }
 
 export interface PrevisaoHoraItem {
-  time: string // ISO / YYYY-MM-DDTHH:00
+  time: string
   wind_speed_10m: number | null
   wind_direction_10m: number | null
   wind_gusts_10m: number | null
-  beaufort?: number
+  beaufort: number
   precipitation: number | null
   visibility: number | null
-  temperature_2m?: number | null
-  surface_pressure?: number | null
-  cloud_cover?: number | null
-  uv_index?: number | null
+  temperature_2m: number | null
+  surface_pressure: number | null
+  cloud_cover: number | null
+  uv_index: number | null
   wave_height: number | null
   wave_period: number | null
-  douglas_grau?: number
+  douglas_grau: number
   sea_level_height_msl: number | null
-  sea_surface_temperature?: number | null
-  swell_wave_direction?: number | null
-  swell_wave_period?: number | null
-  wind_wave_height?: number | null
-  ocean_current_velocity?: number | null
-  ocean_current_direction?: number | null
+  sea_surface_temperature: number | null
+  swell_wave_direction: number | null
+  swell_wave_period: number | null
+  wind_wave_height: number | null
+  ocean_current_velocity: number | null
+  ocean_current_direction: number | null
 }
 
 export interface ResumoDiaItem {
-  dataIso: string // YYYY-MM-DD
-  nomeDia: string // Hoje, Seg, Ter, Qua, Qui, Sex, Sáb
-  dataExibicao: string // DD/MM
+  dataIso: string
+  nomeDia: string
+  dataExibicao: string
   isHoje: boolean
   ventoMax: number | null
-  ventoMaxBeaufort?: number
+  ventoMaxBeaufort: number
   ondaMax: number | null
-  ondaMaxDouglas?: number
+  ondaMaxDouglas: number
   chuvaTotal: number
 }
 
-export interface LuaInfo {
-  fase: number // 0 a 1
-  iluminacao_porcentagem: number
-  nome_fase: string
-  icone: string
-}
-
-export interface AstronomiaInfo {
-  nascer_do_sol: string | null // ISO
-  por_do_sol: string | null // ISO
+export interface AstronomiaPayload {
+  nascer_do_sol: string | null
+  por_do_sol: string | null
   duracao_luz_segundos: number | null
-  crepusculo_nautico_matutino: string | null // ISO
-  crepusculo_nautico_vespertino: string | null // ISO
-  lua: LuaInfo
+  crepusculo_nautico_matutino: string | null
+  crepusculo_nautico_vespertino: string | null
+  lua: {
+    fase: number
+    iluminacao_porcentagem: number
+    nome_fase: string
+    icone: string
+  }
 }
 
-export interface PressaoTendenciaInfo {
+export interface PressaoTendenciaPayload {
   atual_hpa: number | null
   delta_3h_hpa: number
-  direcao: 'subindo' | 'estável' | 'descendo'
-  queda_severa: boolean // queda >= 3 hPa/3h
+  direcao: 'subindo' | 'descendo' | 'estável'
+  queda_severa: boolean
 }
 
-export interface MarAtualInfo {
+export interface MarAtualPayload {
   temperatura_agua: number | null
   swell_direcao: number | null
   swell_periodo: number | null
@@ -92,7 +94,7 @@ export interface MarAtualInfo {
   beaufort: number
 }
 
-export interface RotaPontoInfo {
+export interface RotaPonto {
   ponto_slug: string
   ponto_nome: string
   lat: number
@@ -102,108 +104,64 @@ export interface RotaPontoInfo {
   direcao_cardinal: string
 }
 
-export interface DailyPrevisaoItem {
-  date: string
-  sunrise: string | null
-  sunset: string | null
-  daylight_duration: number | null
-}
-
 export interface PrevisaoPayload {
   ponto_id: string
   ponto_nome: string
-  ponto_tipo: TipoPonto
+  ponto_tipo: string
   lat: number
   lon: number
   timezone: string
   hourly: PrevisaoHoraItem[]
-  daily?: DailyPrevisaoItem[]
-  astronomia?: AstronomiaInfo
-  pressao_tendencia?: PressaoTendenciaInfo
-  mar_atual?: MarAtualInfo
-  rotas?: RotaPontoInfo[]
-}
-
-export interface UltimoBriefingStorage {
-  texto: string
-  timestamp: string
-}
-
-export type TipoPontoPersonalizado = 'abrigado' | 'semi-abrigado' | 'mar aberto'
-
-export interface PontoPersonalizado {
-  id: string
-  nome: string
-  lat: number
-  lon: number
-  tipo: TipoPontoPersonalizado
-  criado_em: string
-}
-
-export interface PreferenciasStorage {
-  perfil_id: string
-  ponto_favorito_slug: string
-  horario_briefing: string
-  ultimo_briefing: UltimoBriefingStorage | null
-  pontos_personalizados?: PontoPersonalizado[]
-}
-
-export interface PreferenciasUsuario {
-  id?: string
-  dispositivo_uuid?: string
-  perfil_id?: string
-  ponto_favorito_id?: string
-  ponto_favorito_slug?: string
-  horario_briefing?: string
-  ultimo_briefing?: string | null
-  criado_em?: string
-  created?: string
-  updated?: string
-}
-
-export interface BriefingResponse {
-  texto: string
-  gerado_em: string
+  daily: Array<{
+    date: string
+    sunrise: string | null
+    sunset: string | null
+    daylight_duration: number | null
+  }>
+  astronomia: AstronomiaPayload
+  pressao_tendencia: PressaoTendenciaPayload
+  mar_atual: MarAtualPayload
+  rotas: RotaPonto[]
 }
 
 export interface HourlyScore {
   time: string
   score: number
-  fator_limitante: 'vento' | 'rajada' | 'onda' | 'período' | 'chuva' | 'exposição' | null
-  fator_limitante_desc?: string | null
+  fator_limitante: string | null
+  fator_limitante_desc: string | null
   wind_speed_10m: number | null
   wind_direction_10m: number | null
   wind_gusts_10m: number | null
   precipitation: number | null
   visibility: number | null
-  temperature_2m?: number | null
-  surface_pressure?: number | null
-  cloud_cover?: number | null
-  uv_index?: number | null
+  temperature_2m: number | null
+  surface_pressure: number | null
+  cloud_cover: number | null
+  uv_index: number | null
   wave_height: number | null
   wave_period: number | null
   sea_level_height_msl: number | null
-  sea_surface_temperature?: number | null
-  swell_wave_direction?: number | null
-  swell_wave_period?: number | null
-  wind_wave_height?: number | null
-  ocean_current_velocity?: number | null
-  ocean_current_direction?: number | null
+  sea_surface_temperature: number | null
+  swell_wave_direction: number | null
+  swell_wave_period: number | null
+  wind_wave_height: number | null
+  ocean_current_velocity: number | null
+  ocean_current_direction: number | null
 }
 
 export interface JanelaNavegacao {
-  inicio: string // ISO timestamp
-  fim: string // ISO timestamp
+  inicio: string
+  fim: string
   duracao_horas: number
   score_medio: number
-  fator_limitante: 'vento' | 'rajada' | 'onda' | 'período' | 'chuva' | 'exposição' | null
-  fator_limitante_desc?: string | null
+  fator_limitante: string | null
+  fator_limitante_desc: string | null
 }
 
 export interface JanelasPayload {
   ponto_id: string
   ponto_nome: string
-  ponto_tipo: TipoPonto
+  ponto_tipo: string
   perfil_id: string
   perfil_nome: string
   hourly_scores: HourlyScore[]
@@ -222,4 +180,38 @@ export interface PontoEstadoPrevisao {
   currentScore?: number | null
   proximaJanela?: JanelaNavegacao | null
   isPersonalizado?: boolean
+}
+
+export type TipoPontoPersonalizado = 'abrigado' | 'semi-abrigado' | 'mar aberto'
+
+export interface PontoPersonalizado {
+  id: string
+  nome: string
+  lat: number
+  lon: number
+  tipo: TipoPontoPersonalizado
+  criado_em: string
+}
+
+export interface UltimoBriefingStorage {
+  texto: string
+  timestamp: string
+}
+
+export interface PreferenciasStorage {
+  perfil_id: string
+  ponto_favorito_slug: string
+  horario_briefing: string
+  ultimo_briefing: UltimoBriefingStorage | null
+  pontos_personalizados?: PontoPersonalizado[]
+}
+
+export interface PreferenciasUsuario {
+  dispositivo_uuid: string
+  perfil_id: string
+  ponto_favorito_id?: string
+  ponto_favorito_slug?: string
+  horario_briefing?: string
+  ultimo_briefing?: string
+  updated?: string
 }
