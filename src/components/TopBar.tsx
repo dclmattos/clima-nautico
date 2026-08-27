@@ -100,10 +100,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                   aria-checked={isSelected}
                   onClick={() => setPerfil(opt.id)}
                   title={`Perfil ${opt.label}`}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all select-none ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all duration-150 select-none ${
                     isSelected
-                      ? 'bg-cyan-500 text-zinc-950 font-semibold shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                      ? 'bg-cyan-500 text-white font-semibold shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
