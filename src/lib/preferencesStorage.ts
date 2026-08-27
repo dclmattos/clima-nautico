@@ -56,6 +56,7 @@ export function getStoredPreferences(): PreferenciasStorage | null {
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (parsed && typeof parsed === 'object') {
+      const rawPontos = parsed.pontos_personalizados ?? parsed.pontosPersonalizados
       return {
         perfil_id:
           typeof parsed.perfil_id === 'string' ? parsed.perfil_id : DEFAULT_PREFERENCIAS.perfil_id,
@@ -76,7 +77,7 @@ export function getStoredPreferences(): PreferenciasStorage | null {
             : typeof parsed.ultimo_briefing === 'string'
               ? { texto: parsed.ultimo_briefing, timestamp: new Date().toISOString() }
               : null,
-        pontos_personalizados: sanitizePontosPersonalizados(parsed.pontos_personalizados),
+        pontos_personalizados: sanitizePontosPersonalizados(rawPontos),
       }
     }
     return null

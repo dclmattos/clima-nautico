@@ -235,28 +235,65 @@ export default function TravessiaPage() {
     carregarPontos()
   }, [])
 
+  // Mapeamento dos nomes canônicos completos para os 4 pontos fixos
+  const NOMES_PONTOS_FIXOS: Record<string, string> = {
+    angra: 'Angra dos Reis',
+    abraao: 'Abraão (Ilha Grande)',
+    paraty: 'Paraty',
+    juatinga: 'Juatinga',
+  }
+
   // Lista unificada para os dropdowns de seleção
   const listaOpcoesPontos = useMemo(() => {
     const lista: Array<{ value: string; label: string; group: string }> = []
 
-    pontosFixos.forEach((pf) => {
+    // 1. Os 4 pontos fixos
+    const slugsFixos = ['angra', 'abraao', 'paraty', 'juatinga']
+    slugsFixos.forEach((slug) => {
       lista.push({
-        value: pf.slug || pf.id,
-        label: pf.nome,
+        value: slug,
+        label: NOMES_PONTOS_FIXOS[slug] || slug,
         group: 'Pontos Canônicos',
       })
     })
 
+    // Adiciona outros pontos fixos do backend se houver e não estiverem entre os 4
+    pontosFixos.forEach((pf) => {
+      const val = pf.slug || pf.id
+      if (!slugsFixos.includes(val)) {
+        lista.push({
+          value: val,
+          label: pf.nome,
+          group: 'Pontos Canônicos',
+        })
+      }
+    })
+
+    // 2. Pontos personalizados salvos no localStorage
     pontosCustom.forEach((pc) => {
       lista.push({
-        value: `custom:${pc.lat.toFixed(3)}:${pc.lon.toFixed(3)}:${pc.tipo || 'abrigado'}`,
-        label: `${pc.nome} (Personalizado)`,
+        value: pc.id,
+        label: `⭐ ${pc.nome}`,
         group: 'Meus Pontos',
       })
     })
 
     return lista
   }, [pontosFixos, pontosCustom])
+
+  const handleOrigemChange = (novoValor: string) => {
+    setOrigem(novoValor)
+    if (destino === novoValor) {
+      setDestino('')
+    }
+  }
+
+  const handleDestinoChange = (novoValor: string) => {
+    setDestino(novoValor)
+    if (origem === novoValor) {
+      setOrigem('')
+    }
+  }
 
   // Dispara o cálculo da travessia
   const handleCalcular = useCallback(
@@ -539,13 +576,18 @@ export default function TravessiaPage() {
             {/* Origem */}
             <div className="sm:col-span-5 space-y-1.5">
               <Label className="text-xs font-medium text-zinc-300">Ponto de Origem</Label>
-              <Select value={origem} onValueChange={setOrigem}>
+              <Select value={origem} onValueChange={handleOrigemChange}>
                 <SelectTrigger className="bg-[#090d13] border-zinc-700 text-zinc-100 h-9 text-xs">
                   <SelectValue placeholder="Selecione a origem" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#0d131b] border-zinc-700 text-zinc-200">
                   {listaOpcoesPontos.map((pt) => (
-                    <SelectItem key={`origem-${pt.value}`} value={pt.value} className="text-xs">
+                    <SelectItem
+                      key={`origem-${pt.value}`}
+                      value={pt.value}
+                      disabled={pt.value === destino}
+                      className="text-xs"
+                    >
                       {pt.label}
                     </SelectItem>
                   ))}
@@ -570,13 +612,18 @@ export default function TravessiaPage() {
             {/* Destino */}
             <div className="sm:col-span-5 space-y-1.5">
               <Label className="text-xs font-medium text-zinc-300">Ponto de Destino</Label>
-              <Select value={destino} onValueChange={setDestino}>
+              <Select value={destino} onValueChange={handleDestinoChange}>
                 <SelectTrigger className="bg-[#090d13] border-zinc-700 text-zinc-100 h-9 text-xs">
                   <SelectValue placeholder="Selecione o destino" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#0d131b] border-zinc-700 text-zinc-200">
                   {listaOpcoesPontos.map((pt) => (
-                    <SelectItem key={`dest-${pt.value}`} value={pt.value} className="text-xs">
+                    <SelectItem
+                      key={`dest-${pt.value}`}
+                      value={pt.value}
+                      disabled={pt.value === origem}
+                      className="text-xs"
+                    >
                       {pt.label}
                     </SelectItem>
                   ))}
