@@ -9,6 +9,7 @@ import {
   calculateSemaforo,
   getProximaJanela,
   formatarJanelaBadge,
+  formatPontoNome,
   PONTOS_DISPONIVEIS,
 } from '@/services/previsaoService'
 import { getPontosPersonalizados } from '@/lib/preferencesStorage'
@@ -367,7 +368,9 @@ export const Index: React.FC = () => {
       const janelas = pe.janelasData?.janelas || []
       if (janelas.length > 0) {
         temJanelas = true
-        txt += `📍 *${pe.ponto.nome}*:\n`
+        const isCustom = pe.isPersonalizado || pe.ponto.id?.startsWith('custom-')
+        const nomePonto = isCustom ? pe.ponto.nome : formatPontoNome(pe.ponto.nome) || pe.ponto.nome
+        txt += `📍 *${nomePonto}*:\n`
         janelas.slice(0, 3).forEach((j) => {
           const badge = formatarJanelaBadge(j.inicio, j.fim)
           txt += `  • ${badge} (${j.score_medio} pts${j.fator_limitante ? ` · ${j.fator_limitante}` : ''})\n`

@@ -854,8 +854,17 @@ export function getNext48HoursForecast(hourly: PrevisaoHoraItem[]): {
 
 /**
  * Agrupa os dados horários em 7 dias diários (hoje + 6 dias)
+ * Opcionalmente aceita a lista diária para cálculo exato de nascer e pôr do sol
  */
-export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaItem[] {
+export function aggregate7DaysForecast(
+  hourly: PrevisaoHoraItem[],
+  daily?: Array<{
+    date: string
+    sunrise: string | null
+    sunset: string | null
+    daylight_duration?: number | null
+  }>,
+): ResumoDiaItem[] {
   if (!hourly || hourly.length === 0) return []
 
   const diasSemanaMap: Record<number, string> = {
@@ -866,6 +875,16 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
     4: 'Qui',
     5: 'Sex',
     6: 'Sáb',
+  }
+
+  const sunMap: Record<string, { sunrise: number | null; sunset: number | null }> = {}
+  if (daily && daily.length > 0) {
+    for (const d of daily) {
+      sunMap[d.date] = {
+        sunrise: d.sunrise ? new Date(d.sunrise).getTime() : null,
+        sunset: d.sunset ? new Date(d.sunset).getTime() : null,
+      }
+    }
   }
 
   const grupos: Record<string, PrevisaoHoraItem[]> = {}
@@ -901,6 +920,28 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
     let maxOnda: number | null = null
     let totalChuva = 0
 
+    // Determina o período diurno para o dia
+    const daySun = sunMap[dateStr]
+    const isDaylight = (timeStr: string) => {
+      try {
+        const itemTime = new Date(timeStr).getTime()
+        if (daySun && daySun.sunrise && daySun.sunset) {
+          return (
+            itemTime >= daySun.sunrise - 30 * 60 * 1000 &&
+            itemTime <= daySun.sunset + 30 * 60 * 1000
+          )
+        }
+        const hour = new Date(timeStr).getHours()
+        return hour >= 6 && hour < 18
+      } catch {
+        const h = parseInt(timeStr.slice(11, 13), 10)
+        return h >= 6 && h < 18
+      }
+    }
+
+    const diurnoItems: PrevisaoHoraItem[] = []
+    let temTempestadeNoDia = false
+
     for (const it of items) {
       if (it.wind_speed_10m !== null) {
         if (maxVento === null || it.wind_speed_10m > maxVento) {
@@ -915,6 +956,50 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
       if (it.precipitation !== null && it.precipitation > 0) {
         totalChuva += it.precipitation
       }
+
+      if (it.weather_code !== null && it.weather_code !== undefined) {
+        const c = Math.round(it.weather_code)
+        if (c >= 95 && c <= 99) {
+          temTempestadeNoDia = true
+        }
+      }
+
+      if (isDaylight(it.time)) {
+        diurnoItems.push(it)
+      }
+    }
+
+    // Calcula weather_code predominante diurno com prioridade para tempestade (95-99)
+    let weatherCodePredominante: number | null = null
+    if (temTempestadeNoDia) {
+      const stormItem = items.find(
+        (it) =>
+          it.weather_code !== null &&
+          it.weather_code !== undefined &&
+          Math.round(it.weather_code) >= 95 &&
+          Math.round(it.weather_code) <= 99,
+      )
+      weatherCodePredominante = stormItem?.weather_code ?? 95
+    } else {
+      const targetItems = diurnoItems.length > 0 ? diurnoItems : items
+      const freq: Record<number, number> = {}
+      for (const it of targetItems) {
+        if (it.weather_code !== null && it.weather_code !== undefined) {
+          const c = Math.round(it.weather_code)
+          freq[c] = (freq[c] || 0) + 1
+        }
+      }
+
+      let maxCount = 0
+      let mostFreqCode: number | null = null
+      for (const codeStr of Object.keys(freq)) {
+        const codeNum = Number(codeStr)
+        if (freq[codeNum] > maxCount) {
+          maxCount = freq[codeNum]
+          mostFreqCode = codeNum
+        }
+      }
+      weatherCodePredominante = mostFreqCode
     }
 
     return {
@@ -927,6 +1012,7 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
       ondaMax: maxOnda !== null ? Math.round(maxOnda * 100) / 100 : null,
       ondaMaxDouglas: maxOnda !== null ? getDouglasScale(maxOnda).grau : 0,
       chuvaTotal: Math.round(totalChuva * 10) / 10,
+      weatherCode: weatherCodePredominante,
     }
   })
 }

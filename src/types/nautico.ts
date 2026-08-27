@@ -60,6 +60,7 @@ export interface ResumoDiaItem {
   ondaMax: number | null
   ondaMaxDouglas: number
   chuvaTotal: number
+  weatherCode?: number | null
 }
 
 export interface AstronomiaPayload {

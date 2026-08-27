@@ -4,6 +4,7 @@ import {
   fetchPontos,
   fetchPrevisaoPorPonto,
   fetchJanelas,
+  formatPontoNome,
   PONTOS_DISPONIVEIS,
   calcularRotasNauticas,
 } from '@/services/previsaoService'
@@ -84,7 +85,10 @@ export const PontoDetalhePage: React.FC = () => {
                 p.id === slug,
             )
             if (match) {
-              pontoEncontrado = match
+              pontoEncontrado = {
+                ...match,
+                nome: formatPontoNome(match.nome),
+              }
               setIsPersonalizado(false)
             }
           } catch {
@@ -134,7 +138,7 @@ export const PontoDetalhePage: React.FC = () => {
         }
 
         if (!pontoEncontrado) {
-          throw new Error(`Ponto náutico "${slug}" não foi encontrado.`)
+          throw new Error(`Ponto náutico "${formatPontoNome(slug)}" não foi encontrado.`)
         }
 
         setPonto(pontoEncontrado)

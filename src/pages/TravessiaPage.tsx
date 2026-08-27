@@ -4,6 +4,7 @@ import {
   fetchPontos,
   fetchCalculoTravessia,
   enviarBriefingEmail,
+  formatPontoNome,
   PONTOS_DISPONIVEIS,
   getWindDirectionLabel,
 } from '@/services/previsaoService'
@@ -383,8 +384,10 @@ export default function TravessiaPage() {
   // Monta texto de resumo da travessia para compartilhamento
   const getTextoCompartilhamento = () => {
     if (!resultado) return ''
-    const oNome = resultado.origem?.nome || 'Origem'
-    const dNome = resultado.destino?.nome || 'Destino'
+    const oNome =
+      formatPontoNome(resultado.origem?.nome || '') || resultado.origem?.nome || 'Origem'
+    const dNome =
+      formatPontoNome(resultado.destino?.nome || '') || resultado.destino?.nome || 'Destino'
     const vereditoEmoji =
       resultado.veredito === 'verde' ? '🟢' : resultado.veredito === 'amarelo' ? '🟡' : '🔴'
     const vereditoTexto = resultado.veredito.toUpperCase()
