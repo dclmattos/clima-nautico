@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePerfil } from '@/contexts/PerfilContext'
 import { Button } from '@/components/ui/button'
 import { Ship, Sailboat, Zap, Settings, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface TopBarProps {
   ultimaAtualizacao?: Date | string | null
@@ -59,7 +60,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   }
 
   const horaFormatada = formatHoraAtualizacao(ultimaAtualizacao)
-  const perfilAtivoId = (perfil?.id || perfil?.nome || 'lancha').toLowerCase()
+  const perfilAtivoId = (perfil?.nome || 'lancha').toLowerCase()
 
   return (
     <header
@@ -90,7 +91,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             {PERFIS_OPTIONS.map((opt) => {
               const Icon = opt.icon
-              const isSelected = perfilAtivoId === opt.id || perfilAtivoId.includes(opt.id)
+              const isSelected = perfilAtivoId === opt.id
 
               return (
                 <button
@@ -100,11 +101,12 @@ export const TopBar: React.FC<TopBarProps> = ({
                   aria-checked={isSelected}
                   onClick={() => setPerfil(opt.id)}
                   title={`Perfil ${opt.label}`}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all duration-150 select-none ${
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all duration-150 select-none',
                     isSelected
-                      ? 'bg-cyan-500 text-white font-semibold shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60'
-                  }`}
+                      ? 'bg-[#0891b2] text-white font-semibold shadow-sm'
+                      : 'bg-transparent text-gray-400',
+                  )}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span className={isSelected ? 'inline' : 'hidden sm:inline'}>{opt.label}</span>
