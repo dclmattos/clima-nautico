@@ -15,6 +15,7 @@ import {
   getBeaufortScale,
   getDouglasScale,
   getNext48HoursForecast,
+  getCurrentHourForecast,
   aggregate7DaysForecast,
   PONTOS_DISPONIVEIS,
   getWeatherCondition,
@@ -117,6 +118,20 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
       tipo: (previsao.ponto_tipo as any) || 'abrigado',
     }
   }, [currentSlug, previsao, ponto, isCustom])
+
+  const currentHourData = useMemo(() => {
+    return previsao.hourly ? getCurrentHourForecast(previsao.hourly) : null
+  }, [previsao.hourly])
+
+  const currentSkyCondition = useMemo(() => {
+    const weatherCode =
+      currentHourData?.weather_code !== undefined && currentHourData?.weather_code !== null
+        ? currentHourData.weather_code
+        : previsao.weather_code !== undefined && previsao.weather_code !== null
+          ? previsao.weather_code
+          : null
+    return getWeatherCondition(weatherCode)
+  }, [currentHourData, previsao.weather_code])
 
   const { items: forecast48h } = useMemo(() => {
     return getNext48HoursForecast(previsao.hourly || [])
@@ -221,6 +236,10 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                 >
                   {formatTipoPonto(pontoConfig.tipo)}
                 </Badge>
+                <div className={`flex items-center gap-1 text-xs ${currentSkyCondition.color}`}>
+                  {renderSkyIcon(currentSkyCondition.iconName, 'w-4 h-4 shrink-0')}
+                  <span>{currentSkyCondition.label}</span>
+                </div>
               </div>
 
               {/* Coordenadas DMM */}
@@ -428,7 +447,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
                             <span className={`inline-flex items-center gap-1 text-xs ${sky.color}`}>
-                              {renderSkyIcon(sky.iconName, 'w-3.5 h-3.5 shrink-0')}
+                              {renderSkyIcon(sky.iconName, 'w-4 h-4 shrink-0')}
                               <span>{sky.label}</span>
                             </span>
                           </td>
