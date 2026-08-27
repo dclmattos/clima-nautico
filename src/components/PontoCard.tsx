@@ -17,7 +17,6 @@ import {
   Compass,
   Waves,
   Clock,
-  CloudRain,
   AlertTriangle,
   RefreshCw,
   ChevronRight,
@@ -28,13 +27,8 @@ import {
   Copy,
   Check,
   Droplets,
-  CloudSun,
-  Cloud,
-  CloudFog,
-  CloudDrizzle,
-  CloudLightning,
-  CloudOff,
 } from 'lucide-react'
+import { SkyConditionIcon } from '@/components/SkyConditionIcon'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 
@@ -319,27 +313,6 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
         : null
   const skyCondition = getWeatherCondition(weatherCode)
 
-  const renderSkyIcon = (iconName: string, className: string) => {
-    switch (iconName) {
-      case 'Sun':
-        return <Sun className={className} />
-      case 'CloudSun':
-        return <CloudSun className={className} />
-      case 'Cloud':
-        return <Cloud className={className} />
-      case 'CloudFog':
-        return <CloudFog className={className} />
-      case 'CloudDrizzle':
-        return <CloudDrizzle className={className} />
-      case 'CloudRain':
-        return <CloudRain className={className} />
-      case 'CloudLightning':
-        return <CloudLightning className={className} />
-      default:
-        return <CloudOff className={className} />
-    }
-  }
-
   const handleCardClick = () => {
     let slugDestino = ponto.slug || ponto.nome?.toLowerCase() || ponto.id
     if (isCustom) {
@@ -387,9 +360,9 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
             {/* Canto superior direito: Indicador de Condição do Céu + Score Circular */}
             <div className="flex items-center gap-3">
               {/* Indicador de Condição do Céu */}
-              <div className={`flex items-center gap-1 text-xs ${skyCondition.color}`}>
-                {renderSkyIcon(skyCondition.iconName, 'w-4 h-4 shrink-0')}
-                <span>{skyCondition.label}</span>
+              <div className="flex items-center gap-1 text-xs">
+                <SkyConditionIcon iconName={skyCondition.iconName} className="w-4 h-4 shrink-0" />
+                <span className={skyCondition.labelColor}>{skyCondition.label}</span>
               </div>
 
               {/* Score Circular */}

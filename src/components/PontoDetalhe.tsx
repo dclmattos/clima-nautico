@@ -29,14 +29,12 @@ import {
   Compass,
   Waves,
   Clock,
-  CloudRain,
   Sun,
   Sunset,
   Thermometer,
   Gauge,
   Copy,
   Check,
-  Eye,
   Calendar,
   Navigation,
   ArrowRight,
@@ -44,14 +42,8 @@ import {
   TrendingUp,
   Minus,
   RefreshCw,
-  Droplets,
-  CloudSun,
-  Cloud,
-  CloudFog,
-  CloudDrizzle,
-  CloudLightning,
-  CloudOff,
 } from 'lucide-react'
+import { SkyConditionIcon } from '@/components/SkyConditionIcon'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 
@@ -183,27 +175,6 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
     return dirs[idx]
   }
 
-  const renderSkyIcon = (iconName: string, className: string) => {
-    switch (iconName) {
-      case 'Sun':
-        return <Sun className={className} />
-      case 'CloudSun':
-        return <CloudSun className={className} />
-      case 'Cloud':
-        return <Cloud className={className} />
-      case 'CloudFog':
-        return <CloudFog className={className} />
-      case 'CloudDrizzle':
-        return <CloudDrizzle className={className} />
-      case 'CloudRain':
-        return <CloudRain className={className} />
-      case 'CloudLightning':
-        return <CloudLightning className={className} />
-      default:
-        return <CloudOff className={className} />
-    }
-  }
-
   const formatHoraTabela = (timeIso: string) => {
     try {
       const d = new Date(timeIso)
@@ -236,9 +207,14 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                 >
                   {formatTipoPonto(pontoConfig.tipo)}
                 </Badge>
-                <div className={`flex items-center gap-1 text-xs ${currentSkyCondition.color}`}>
-                  {renderSkyIcon(currentSkyCondition.iconName, 'w-4 h-4 shrink-0')}
-                  <span>{currentSkyCondition.label}</span>
+                <div className="flex items-center gap-1 text-xs">
+                  <SkyConditionIcon
+                    iconName={currentSkyCondition.iconName}
+                    className="w-4 h-4 shrink-0"
+                  />
+                  <span className={currentSkyCondition.labelColor}>
+                    {currentSkyCondition.label}
+                  </span>
                 </div>
               </div>
 
@@ -456,9 +432,12 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             {formatHoraTabela(item.time)}
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 text-xs ${sky.color}`}>
-                              {renderSkyIcon(sky.iconName, 'w-4 h-4 shrink-0')}
-                              <span>{sky.label}</span>
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-4 h-4 shrink-0"
+                              />
+                              <span className={sky.labelColor}>{sky.label}</span>
                             </span>
                           </td>
                           <td className="p-3 font-bold text-sky-300">{vento}</td>
@@ -532,9 +511,12 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             </span>
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 text-xs ${sky.color}`}>
-                              {renderSkyIcon(sky.iconName, 'w-4 h-4 shrink-0')}
-                              <span>{sky.label}</span>
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-4 h-4 shrink-0"
+                              />
+                              <span className={sky.labelColor}>{sky.label}</span>
                             </span>
                           </td>
                           <td className="p-3 whitespace-nowrap font-mono">

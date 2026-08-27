@@ -1082,43 +1082,95 @@ export function getWeatherCondition(code: number | null | undefined): {
     | 'CloudFog'
     | 'CloudDrizzle'
     | 'CloudRain'
+    | 'CloudSnow'
     | 'CloudLightning'
     | 'CloudOff'
   label: string
-  color: string
+  labelColor: string
+  isStorm: boolean
 } {
   if (code === null || code === undefined || isNaN(code)) {
-    return { iconName: 'CloudOff', label: '—', color: 'text-zinc-500' }
+    return {
+      iconName: 'CloudOff',
+      label: '—',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
 
   const c = Math.round(code)
 
   if (c === 0 || c === 1) {
-    return { iconName: 'Sun', label: 'Sol', color: 'text-zinc-400' }
+    return {
+      iconName: 'Sun',
+      label: 'Sol',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c === 2) {
-    return { iconName: 'CloudSun', label: 'Parcial', color: 'text-zinc-400' }
+    return {
+      iconName: 'CloudSun',
+      label: 'Parcial',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c === 3) {
-    return { iconName: 'Cloud', label: 'Nublado', color: 'text-zinc-400' }
+    return {
+      iconName: 'Cloud',
+      label: 'Nublado',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c >= 45 && c <= 48) {
-    return { iconName: 'CloudFog', label: 'Névoa', color: 'text-zinc-400' }
+    return {
+      iconName: 'CloudFog',
+      label: 'Névoa',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c >= 51 && c <= 67) {
-    return { iconName: 'CloudDrizzle', label: 'Chuva', color: 'text-zinc-400' }
+    return {
+      iconName: 'CloudDrizzle',
+      label: 'Chuva',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c >= 71 && c <= 77) {
-    return { iconName: 'CloudRain', label: 'Chuva', color: 'text-zinc-400' }
+    return {
+      iconName: 'CloudSnow',
+      label: 'Neve',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c >= 80 && c <= 82) {
-    return { iconName: 'CloudRain', label: 'Chuva forte', color: 'text-zinc-400' }
+    return {
+      iconName: 'CloudRain',
+      label: 'Chuva forte',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
   }
   if (c >= 95 && c <= 99) {
-    return { iconName: 'CloudLightning', label: 'Tempestade', color: 'text-amber-400' }
+    return {
+      iconName: 'CloudLightning',
+      label: 'Tempestade',
+      labelColor: 'text-[#A78BFA]',
+      isStorm: true,
+    }
   }
 
-  return { iconName: 'CloudOff', label: '—', color: 'text-zinc-500' }
+  return {
+    iconName: 'CloudOff',
+    label: '—',
+    labelColor: 'text-zinc-400',
+    isStorm: false,
+  }
 }
 
 /**
