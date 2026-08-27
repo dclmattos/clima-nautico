@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePerfil } from '@/contexts/PerfilContext'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { LoadingState } from '@/components/ui/LoadingState'
+import { useToast } from '@/hooks/use-toast'
+import {
+  PREFS_STORAGE_KEY,
+  getStoredPreferences,
+  setStoredPreferences,
+} from '@/lib/preferencesStorage'
+import { PreferenciasStorage } from '@/types/nautico'
 import {
   Settings,
   ArrowLeft,
@@ -21,11 +28,128 @@ import {
   Ship,
   Sailboat,
   Zap,
+  Download,
+  Upload,
 } from 'lucide-react'
 
 export const ConfigPage: React.FC = () => {
   const navigate = useNavigate()
-  const { perfil, perfis, setPerfil, deviceId, loading } = usePerfil()
+  const { perfil, perfis, setPerfil, deviceId, loading, reload } = usePerfil()
+  const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExportarPreferencias = () => {
+    try {
+      const prefs = getStoredPreferences()
+      const dataStr = JSON.stringify(prefs || {}, null, 2)
+      const blob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'clima-nautico-prefs.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: 'Preferências exportadas!',
+        description: 'Arquivo clima-nautico-prefs.json baixado com sucesso.',
+        duration: 3000,
+      })
+    } catch (err: any) {
+      console.error('Erro ao exportar preferências:', err)
+      toast({
+        title: 'Erro ao exportar',
+        description: 'Não foi possível gerar o arquivo de preferências.',
+        variant: 'destructive',
+        duration: 3000,
+      })
+    }
+  }
+
+  const handleImportarClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string
+        const parsed = JSON.parse(text)
+
+        // Validação básica dos campos esperados
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Formato de arquivo inválido')
+        }
+
+        if (typeof parsed.perfil_id !== 'string') {
+          throw new Error('Campo "perfil_id" ausente ou inválido')
+        }
+
+        const validPrefs: PreferenciasStorage = {
+          perfil_id: parsed.perfil_id,
+          ponto_favorito_slug:
+            typeof parsed.ponto_favorito_slug === 'string' ? parsed.ponto_favorito_slug : 'angra',
+          horario_briefing:
+            typeof parsed.horario_briefing === 'string' ? parsed.horario_briefing : '07:00',
+          ultimo_briefing:
+            parsed.ultimo_briefing && typeof parsed.ultimo_briefing === 'object'
+              ? {
+                  texto: String(parsed.ultimo_briefing.texto || ''),
+                  timestamp: String(parsed.ultimo_briefing.timestamp || new Date().toISOString()),
+                }
+              : null,
+        }
+
+        // Sobrescreve no localStorage
+        localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(validPrefs))
+        setStoredPreferences(validPrefs)
+
+        if (reload) {
+          await reload()
+        }
+
+        toast({
+          title: 'Preferências importadas!',
+          description: 'Suas preferências foram restauradas com sucesso.',
+          duration: 3000,
+        })
+      } catch (err: any) {
+        console.error('Erro ao importar JSON:', err)
+        toast({
+          title: 'Falha ao importar',
+          description:
+            err?.message || 'Arquivo JSON inválido. Verifique o conteúdo do arquivo selecionado.',
+          variant: 'destructive',
+          duration: 4000,
+        })
+      } finally {
+        // Reseta o input para permitir selecionar o mesmo arquivo novamente se necessário
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    }
+
+    reader.onerror = () => {
+      toast({
+        title: 'Erro na leitura do arquivo',
+        description: 'Não foi possível ler o arquivo selecionado.',
+        variant: 'destructive',
+        duration: 3000,
+      })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+
+    reader.readAsText(file)
+  }
 
   const getPerfilIcon = (nome: string) => {
     const n = nome.toLowerCase()
@@ -252,6 +376,51 @@ export const ConfigPage: React.FC = () => {
             </CardContent>
           </Card>
 
+          {/* Exportar e Importar Preferências */}
+          <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
+            <CardHeader className="pb-3 border-b border-zinc-800/80">
+              <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                <Download className="w-4 h-4 text-cyan-400" />
+                Backup de Preferências
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5 space-y-4">
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Exporte suas configurações locais para um arquivo JSON ou importe dados salvos de
+                outro navegador/dispositivo:
+              </p>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <Button
+                  onClick={handleExportarPreferencias}
+                  variant="outline"
+                  size="sm"
+                  className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-200 hover:text-cyan-200 text-xs gap-2 flex-1 sm:flex-initial"
+                >
+                  <Download className="w-4 h-4 text-cyan-400" />
+                  Exportar preferências
+                </Button>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".json,application/json"
+                  className="hidden"
+                />
+
+                <Button
+                  onClick={handleImportarClick}
+                  variant="outline"
+                  size="sm"
+                  className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-200 hover:text-cyan-200 text-xs gap-2 flex-1 sm:flex-initial"
+                >
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  Importar preferências
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Identificação do Dispositivo */}
           <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
             <CardHeader className="pb-3 border-b border-zinc-800/80">
@@ -262,8 +431,7 @@ export const ConfigPage: React.FC = () => {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-2">
               <p className="text-xs text-zinc-400">
-                UUID único utilizado para sincronizar e persistir seu perfil e preferências no
-                PocketBase:
+                UUID único do seu dispositivo armazenado localmente:
               </p>
               <div className="flex items-center gap-2">
                 <Input

@@ -124,13 +124,26 @@ export interface PrevisaoPayload {
   rotas?: RotaPontoInfo[]
 }
 
+export interface UltimoBriefingStorage {
+  texto: string
+  timestamp: string
+}
+
+export interface PreferenciasStorage {
+  perfil_id: string
+  ponto_favorito_slug: string
+  horario_briefing: string
+  ultimo_briefing: UltimoBriefingStorage | null
+}
+
 export interface PreferenciasUsuario {
   id?: string
   dispositivo_uuid?: string
   perfil_id?: string
   ponto_favorito_id?: string
+  ponto_favorito_slug?: string
   horario_briefing?: string
-  ultimo_briefing?: string
+  ultimo_briefing?: string | null
   criado_em?: string
   created?: string
   updated?: string

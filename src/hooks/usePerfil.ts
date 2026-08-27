@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
-import { PerfilNavegacao, PreferenciasUsuario } from '@/types/nautico'
+import { PerfilNavegacao, PreferenciasStorage, PreferenciasUsuario } from '@/types/nautico'
 import { getDeviceId } from '@/lib/deviceId'
+import { fetchPerfis } from '@/services/previsaoService'
 import {
-  fetchPerfis,
-  fetchPreferenciasPorDispositivo,
-  salvarPreferenciasDispositivo,
-} from '@/services/previsaoService'
+  inicializarPreferencias,
+  setStoredPreferences,
+  getStoredPreferences,
+} from '@/lib/preferencesStorage'
 
 export function usePerfilInternal() {
   const [deviceId] = useState<string>(() => getDeviceId())
   const [perfis, setPerfis] = useState<PerfilNavegacao[]>([])
   const [perfil, setPerfilState] = useState<PerfilNavegacao | null>(null)
-  const [preferencias, setPreferencias] = useState<PreferenciasUsuario | null>(null)
+  const [preferenciasStorage, setPreferenciasStorage] = useState<PreferenciasStorage | null>(() =>
+    getStoredPreferences(),
+  )
   const [loading, setLoading] = useState<boolean>(true)
 
   const inicializar = useCallback(async () => {
@@ -21,7 +24,8 @@ export function usePerfilInternal() {
       setPerfis(perfisData)
 
       const id = deviceId || getDeviceId()
-      const prefs = await fetchPreferenciasPorDispositivo(id)
+      const prefs = await inicializarPreferencias(id)
+      setPreferenciasStorage(prefs)
 
       let selectedPerfil: PerfilNavegacao | null = null
 
@@ -33,14 +37,8 @@ export function usePerfilInternal() {
       // Se não existir, seleciona o primeiro (lancha) e persiste
       if (!selectedPerfil && perfisData.length > 0) {
         selectedPerfil = perfisData[0]
-        try {
-          const created = await salvarPreferenciasDispositivo(id, selectedPerfil.id)
-          setPreferencias(created)
-        } catch (err) {
-          console.warn('Falha ao persistir preferencia inicial:', err)
-        }
-      } else {
-        setPreferencias(prefs)
+        const updated = setStoredPreferences({ perfil_id: selectedPerfil.id })
+        setPreferenciasStorage(updated)
       }
 
       setPerfilState(selectedPerfil)
@@ -73,17 +71,20 @@ export function usePerfilInternal() {
 
       if (match) {
         setPerfilState(match)
-        const id = deviceId || getDeviceId()
-        try {
-          const updated = await salvarPreferenciasDispositivo(id, match.id)
-          setPreferencias(updated)
-        } catch (err) {
-          console.warn('Erro ao salvar nova preferencia de perfil:', err)
-        }
+        const updated = setStoredPreferences({ perfil_id: match.id })
+        setPreferenciasStorage(updated)
       }
     },
-    [perfis, perfil, deviceId],
+    [perfis, perfil],
   )
+
+  const salvarUltimoBriefing = useCallback((texto: string) => {
+    const timestamp = new Date().toISOString()
+    const updated = setStoredPreferences({
+      ultimo_briefing: { texto, timestamp },
+    })
+    setPreferenciasStorage(updated)
+  }, [])
 
   return {
     deviceId,
@@ -101,7 +102,19 @@ export function usePerfilInternal() {
       } as PerfilNavegacao),
     setPerfil,
     loading,
-    preferencias,
+    preferencias: preferenciasStorage
+      ? ({
+          dispositivo_uuid: deviceId,
+          perfil_id: preferenciasStorage.perfil_id,
+          ponto_favorito_id: preferenciasStorage.ponto_favorito_slug,
+          ponto_favorito_slug: preferenciasStorage.ponto_favorito_slug,
+          horario_briefing: preferenciasStorage.horario_briefing,
+          ultimo_briefing: preferenciasStorage.ultimo_briefing?.texto,
+          updated: preferenciasStorage.ultimo_briefing?.timestamp,
+        } as PreferenciasUsuario)
+      : null,
+    preferenciasStorage,
+    salvarUltimoBriefing,
     reload: inicializar,
   }
 }

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T00:38:57.337Z",
+  "generatedAt": "2026-08-27T00:45:39.682Z",
   "collections": [
     {
       "name": "users",
@@ -50,9 +50,9 @@
       "apiRules": {
         "list": "",
         "view": "",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": null,
+        "update": null,
+        "delete": null
       },
       "fields": [
         {
@@ -109,9 +109,9 @@
       "apiRules": {
         "list": "",
         "view": "",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": null,
+        "update": null,
+        "delete": null
       },
       "fields": [
         {
@@ -171,11 +171,11 @@
       "name": "preferencias",
       "type": "base",
       "apiRules": {
-        "list": "",
-        "view": "",
-        "create": "",
-        "update": "",
-        "delete": ""
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
       },
       "fields": [
         {
@@ -237,11 +237,11 @@
       "name": "cache_previsao",
       "type": "base",
       "apiRules": {
-        "list": "",
-        "view": "",
-        "create": "",
-        "update": "",
-        "delete": ""
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
       },
       "fields": [
         {

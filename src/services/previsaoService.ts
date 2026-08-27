@@ -52,13 +52,16 @@ export async function fetchPerfis(): Promise<PerfilNavegacao[]> {
 export async function fetchPreferenciasPorDispositivo(
   deviceId: string,
 ): Promise<PreferenciasUsuario | null> {
-  try {
-    const record = await pb
-      .collection('preferencias')
-      .getFirstListItem<PreferenciasUsuario>(`dispositivo_uuid="${deviceId}"`)
-    return record
-  } catch {
-    return null
+  const { inicializarPreferencias } = await import('@/lib/preferencesStorage')
+  const prefs = await inicializarPreferencias(deviceId)
+  return {
+    dispositivo_uuid: deviceId,
+    perfil_id: prefs.perfil_id,
+    ponto_favorito_id: prefs.ponto_favorito_slug,
+    ponto_favorito_slug: prefs.ponto_favorito_slug,
+    horario_briefing: prefs.horario_briefing,
+    ultimo_briefing: prefs.ultimo_briefing?.texto,
+    updated: prefs.ultimo_briefing?.timestamp,
   }
 }
 
@@ -67,30 +70,19 @@ export async function salvarPreferenciasDispositivo(
   perfilId: string,
   pontoFavoritoId?: string,
 ): Promise<PreferenciasUsuario> {
-  try {
-    const existing = await fetchPreferenciasPorDispositivo(deviceId)
-    if (existing && existing.id) {
-      const updated = await pb.collection('preferencias').update<PreferenciasUsuario>(existing.id, {
-        perfil_id: perfilId,
-        ...(pontoFavoritoId ? { ponto_favorito_id: pontoFavoritoId } : {}),
-      })
-      return updated
-    } else {
-      const created = await pb.collection('preferencias').create<PreferenciasUsuario>({
-        dispositivo_uuid: deviceId,
-        perfil_id: perfilId,
-        ...(pontoFavoritoId ? { ponto_favorito_id: pontoFavoritoId } : {}),
-        criado_em: new Date().toISOString(),
-      })
-      return created
-    }
-  } catch (err: any) {
-    console.warn('Falha ao salvar preferencias no PocketBase, mantendo em memória/local:', err)
-    return {
-      dispositivo_uuid: deviceId,
-      perfil_id: perfilId,
-      ponto_favorito_id: pontoFavoritoId,
-    }
+  const { setStoredPreferences } = await import('@/lib/preferencesStorage')
+  const updated = setStoredPreferences({
+    perfil_id: perfilId,
+    ...(pontoFavoritoId ? { ponto_favorito_slug: pontoFavoritoId } : {}),
+  })
+  return {
+    dispositivo_uuid: deviceId,
+    perfil_id: updated.perfil_id,
+    ponto_favorito_id: updated.ponto_favorito_slug,
+    ponto_favorito_slug: updated.ponto_favorito_slug,
+    horario_briefing: updated.horario_briefing,
+    ultimo_briefing: updated.ultimo_briefing?.texto,
+    updated: updated.ultimo_briefing?.timestamp,
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react'
-import { PerfilNavegacao, PreferenciasUsuario } from '@/types/nautico'
+import { PerfilNavegacao, PreferenciasStorage, PreferenciasUsuario } from '@/types/nautico'
 import { usePerfilInternal } from '@/hooks/usePerfil'
 
 interface PerfilContextType {
@@ -9,6 +9,8 @@ interface PerfilContextType {
   setPerfil: (idOuNome: string) => Promise<void>
   loading: boolean
   preferencias: PreferenciasUsuario | null
+  preferenciasStorage?: PreferenciasStorage | null
+  salvarUltimoBriefing?: (texto: string) => void
   reload: () => Promise<void>
 }
 

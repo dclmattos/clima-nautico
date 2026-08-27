@@ -100,9 +100,10 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
     try {
       const res = await fetchBriefingComandante(perfilId, deviceId)
       setBriefingTexto(res.texto)
+      const nowIso = res.gerado_em || new Date().toISOString()
 
       try {
-        const d = new Date(res.gerado_em || new Date().toISOString())
+        const d = new Date(nowIso)
         const hh = String(d.getHours()).padStart(2, '0')
         const mm = String(d.getMinutes()).padStart(2, '0')
         setTimestamp(`Gerado às ${hh}:${mm}`)
@@ -113,6 +114,19 @@ export const BriefingCard: React.FC<BriefingCardProps> = ({
           `Gerado às ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         )
         setDataBriefing(now.toLocaleDateString('pt-BR'))
+      }
+
+      // Salva no localStorage
+      try {
+        const { setStoredPreferences } = await import('@/lib/preferencesStorage')
+        setStoredPreferences({
+          ultimo_briefing: {
+            texto: res.texto,
+            timestamp: nowIso,
+          },
+        })
+      } catch (saveStorageErr) {
+        console.warn('Erro ao salvar briefing no localStorage:', saveStorageErr)
       }
 
       if (onBriefingUpdated) {
