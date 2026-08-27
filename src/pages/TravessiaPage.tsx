@@ -62,25 +62,83 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-// Pega a próxima hora cheia formatada para o input datetime-local: YYYY-MM-DDTHH:00
+// Pega a próxima hora cheia formatada para o input datetime-local no fuso America/Sao_Paulo: YYYY-MM-DDTHH:00
 function getProximaHoraCheiaIso(): string {
-  const d = new Date()
-  d.setHours(d.getHours() + 1)
-  d.setMinutes(0, 0, 0)
+  const agora = new Date()
+  // Usa Intl para obter o horário em America/Sao_Paulo
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  // Format parts para decompor com precisão
+  const parts = dtf.formatToParts(agora)
+  const map: Record<string, string> = {}
+  parts.forEach((p) => {
+    map[p.type] = p.value
+  })
+
+  let y = parseInt(map.year || '2026', 10)
+  let m = parseInt(map.month || '1', 10) - 1
+  let day = parseInt(map.day || '1', 10)
+  let h = parseInt(map.hour || '0', 10)
+
+  // Avança 1 hora
+  h += 1
+  const d = new Date(Date.UTC(y, m, day, h, 0, 0))
   const pad = (n: number) => String(n).padStart(2, '0')
-  const y = d.getFullYear()
-  const m = pad(d.getMonth() + 1)
-  const day = pad(d.getDate())
-  const h = pad(d.getHours())
-  const min = pad(d.getMinutes())
-  return `${y}-${m}-${day}T${h}:${min}`
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:00`
 }
+
+// Converte o valor do input datetime-local (ex: "2026-08-27T08:00") em ISO com offset -03:00 (America/Sao_Paulo)
+function toSaoPauloIsoWithOffset(datetimeLocalVal: string): string {
+  if (!datetimeLocalVal) return ''
+  const trimmed = datetimeLocalVal.trim()
+  if (trimmed.includes('+') || (trimmed.includes('-') && trimmed.lastIndexOf('-') > 7)) {
+    return trimmed
+  }
+  // Se tem segundos YYYY-MM-DDTHH:MM:SS
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+    return `${trimmed}-03:00`
+  }
+  // Se tem minutos YYYY-MM-DDTHH:MM
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+    return `${trimmed}:00-03:00`
+  }
+  return `${trimmed}-03:00`
+}
+
+const formatadorHoraCurtaSP = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+const formatadorDataHoraCompletaSP = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
 
 function formatarHoraCurta(isoString?: string | null): string {
   if (!isoString) return '--:--'
   try {
-    const d = new Date(isoString)
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false })
+    let s = String(isoString).trim()
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+      s += '-03:00'
+    }
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return isoString.slice(11, 16) || '--:--'
+    return formatadorHoraCurtaSP.format(d)
   } catch {
     return isoString.slice(11, 16) || '--:--'
   }
@@ -89,13 +147,13 @@ function formatarHoraCurta(isoString?: string | null): string {
 function formatarDataHoraCompleta(isoString?: string | null): string {
   if (!isoString) return '--'
   try {
-    const d = new Date(isoString)
-    return d.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    let s = String(isoString).trim()
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+      s += '-03:00'
+    }
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return isoString
+    return formatadorDataHoraCompletaSP.format(d)
   } catch {
     return isoString
   }
@@ -224,7 +282,8 @@ export default function TravessiaPage() {
       setCalculando(true)
       setNarrativaTexto(null)
 
-      const targetHora = horaParaCalcular || horaSaida || getProximaHoraCheiaIso()
+      const rawHora = horaParaCalcular || horaSaida || getProximaHoraCheiaIso()
+      const targetHoraComOffset = toSaoPauloIsoWithOffset(rawHora)
       const velNumber = velocidadeNos ? parseFloat(velocidadeNos) : velocidadePadrao
       const consumoNumber = consumoLh ? parseFloat(consumoLh) : undefined
 
@@ -232,7 +291,7 @@ export default function TravessiaPage() {
         const res = await fetchCalculoTravessia({
           origem,
           destino,
-          hora_saida: targetHora,
+          hora_saida: targetHoraComOffset,
           velocidade_nos: velNumber,
           perfil_id: perfil?.id || 'lancha',
           consumo_lh: consumoNumber,

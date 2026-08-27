@@ -180,23 +180,47 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   let rumoVerdadeiro = deg * Math.atan2(yB, xB)
   rumoVerdadeiro = Math.round(((rumoVerdadeiro % 360) + 360) % 360)
 
+  // Helpers de Fuso Horário (America/Sao_Paulo: offset padrão UTC-3)
+  const SAO_PAULO_OFFSET_MINUTES = -180 // -03:00
+
+  // Converte timestamp em milissegundos para string ISO com offset America/Sao_Paulo (-03:00)
+  // Ex: 1787832000000 -> "2026-08-27T08:00:00-03:00"
+  const formatIsoSaoPaulo = (ms) => {
+    const d = new Date(ms + SAO_PAULO_OFFSET_MINUTES * 60 * 1000)
+    const pad = (n) => (n < 10 ? '0' + n : '' + n)
+    const y = d.getUTCFullYear()
+    const m = pad(d.getUTCMonth() + 1)
+    const day = pad(d.getUTCDate())
+    const h = pad(d.getUTCHours())
+    const min = pad(d.getUTCMinutes())
+    const s = pad(d.getUTCSeconds())
+    return y + '-' + m + '-' + day + 'T' + h + ':' + min + ':' + s + '-03:00'
+  }
+
+  // Parser robusto para hora de saída recebida
+  // Se vier no formato YYYY-MM-DDTHH:MM sem offset, interpreta explicitamente como America/Sao_Paulo (-03:00)
+  const parseDateSaoPaulo = (str) => {
+    if (!str) return Date.now()
+    let s = String(str).trim()
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+      s += '-03:00'
+    }
+    const t = new Date(s).getTime()
+    return isNaN(t) ? Date.now() : t
+  }
+
   // 3. Duração e ETA
   const duracaoHoras = distNm > 0 && velocidadeNos > 0 ? distNm / velocidadeNos : 0
   const duracaoHorasArredondada = Math.round(duracaoHoras * 10) / 10
 
-  let dataSaida = horaSaidaParam ? new Date(horaSaidaParam) : new Date()
-  if (isNaN(dataSaida.getTime())) {
-    dataSaida = new Date()
-  }
-
-  const horaSaidaMs = dataSaida.getTime()
+  const horaSaidaMs = parseDateSaoPaulo(horaSaidaParam)
   const duracaoMs = duracaoHoras * 3600 * 1000
   const meioMs = horaSaidaMs + duracaoMs / 2
   const etaMs = horaSaidaMs + duracaoMs
 
-  const horaSaidaIso = new Date(horaSaidaMs).toISOString()
-  const meioIso = new Date(meioMs).toISOString()
-  const etaIso = new Date(etaMs).toISOString()
+  const horaSaidaIso = formatIsoSaoPaulo(horaSaidaMs)
+  const meioIso = formatIsoSaoPaulo(meioMs)
+  const etaIso = formatIsoSaoPaulo(etaMs)
 
   // 4. Ponto Médio
   const meioLat = (pontoOrigem.lat + pontoDestino.lat) / 2
@@ -361,14 +385,14 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     })
   }
 
-  // Helper para buscar a hora mais próxima em uma lista horária
+  // Helper para buscar a hora mais próxima em uma lista horária (Open-Meteo retorna 'YYYY-MM-DDTHH:00' na timezone America/Sao_Paulo)
   const findHourlyAt = (hourlyList, targetIso) => {
     if (!hourlyList || hourlyList.length === 0) return null
-    const targetMs = new Date(targetIso).getTime()
+    const targetMs = parseDateSaoPaulo(targetIso)
     let closest = hourlyList[0]
     let minDiff = Infinity
     for (let i = 0; i < hourlyList.length; i++) {
-      const itemMs = new Date(hourlyList[i].time).getTime()
+      const itemMs = parseDateSaoPaulo(hourlyList[i].time)
       const diff = Math.abs(itemMs - targetMs)
       if (diff < minDiff) {
         minDiff = diff
@@ -570,7 +594,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
 
   let chegadaNoturna = false
   if (sunsetDestino) {
-    const sunsetMs = new Date(sunsetDestino).getTime()
+    const sunsetMs = parseDateSaoPaulo(sunsetDestino)
     if (etaMs > sunsetMs) {
       chegadaNoturna = true
     }
@@ -579,9 +603,9 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   // Hora limite de saída para que ETA <= sunset do dia da saída/destino
   let horaLimiteSaidaIso = null
   if (sunsetDestino) {
-    const sunsetMs = new Date(sunsetDestino).getTime()
+    const sunsetMs = parseDateSaoPaulo(sunsetDestino)
     const maxSaidaMs = sunsetMs - duracaoMs
-    horaLimiteSaidaIso = new Date(maxSaidaMs).toISOString()
+    horaLimiteSaidaIso = formatIsoSaoPaulo(maxSaidaMs)
   }
 
   // 7. Veredito Final
@@ -641,9 +665,9 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       const candMeioMs = candSaidaMs + duracaoMs / 2
       const candEtaMs = candSaidaMs + duracaoMs
 
-      const candSaidaIso = new Date(candSaidaMs).toISOString()
-      const candMeioIso = new Date(candMeioMs).toISOString()
-      const candEtaIso = new Date(candEtaMs).toISOString()
+      const candSaidaIso = formatIsoSaoPaulo(candSaidaMs)
+      const candMeioIso = formatIsoSaoPaulo(candMeioMs)
+      const candEtaIso = formatIsoSaoPaulo(candEtaMs)
 
       const candHOrigem = findHourlyAt(prevOrigem.hourly, candSaidaIso)
       const candHMeio = findHourlyAt(prevMeio.hourly, candMeioIso)
@@ -666,7 +690,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
           break
         }
       }
-      const candNoite = candSunset ? candEtaMs > new Date(candSunset).getTime() : false
+      const candNoite = candSunset ? candEtaMs > parseDateSaoPaulo(candSunset) : false
 
       let candVeredito = 'verde'
       if (candMinScore < 50) {
