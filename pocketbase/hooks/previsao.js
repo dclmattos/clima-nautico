@@ -1,28 +1,66 @@
 routerAdd('GET', '/backend/v1/previsao', (e) => {
-  const pontoId = e.requestInfo().query['ponto_id']
+  const query = e.requestInfo().query || {}
+  const pontoIdParam = query['ponto_id']
+  const latParam = query['lat']
+  const lonParam = query['lon']
+  const tipoParam = query['tipo']
+  const nomeParam = query['nome']
 
-  if (!pontoId) {
-    return e.json(400, { error: "Parâmetro 'ponto_id' é obrigatório" })
-  }
+  let pontoId = ''
+  let lat = null
+  let lon = null
+  let pontoTipo = 'abrigado'
+  let pontoNome = ''
 
-  // 1. Busca o ponto no PocketBase (por id, por slug ou pelo campo nome caso passado slug como "angra")
-  let ponto
-  try {
-    ponto = $app.findRecordById('pontos', pontoId)
-  } catch (err) {
+  if (latParam !== undefined && lonParam !== undefined) {
+    const parsedLat = parseFloat(latParam)
+    const parsedLon = parseFloat(lonParam)
+
+    if (isNaN(parsedLat) || isNaN(parsedLon)) {
+      return e.json(400, { error: 'Coordenadas lat/lon inválidas' })
+    }
+
+    lat = parsedLat
+    lon = parsedLon
+    const latFormatted = lat.toFixed(3)
+    const lonFormatted = lon.toFixed(3)
+    pontoId = 'custom:' + latFormatted + ':' + lonFormatted
+    pontoNome = (nomeParam || '').trim() || 'Ponto Personalizado'
+
+    // Tipo
+    const rawTipo = (tipoParam || '').trim().toLowerCase()
+    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado') {
+      pontoTipo = 'semi'
+    } else if (rawTipo === 'aberto' || rawTipo === 'mar aberto' || rawTipo === 'mar-aberto') {
+      pontoTipo = 'aberto'
+    } else {
+      pontoTipo = 'abrigado'
+    }
+  } else if (pontoIdParam) {
+    // 1. Busca o ponto no PocketBase (por id, por slug ou pelo campo nome caso passado slug como "angra")
+    let ponto
     try {
-      ponto = $app.findFirstRecordByData('pontos', 'slug', pontoId)
-    } catch (errSlug) {
+      ponto = $app.findRecordById('pontos', pontoIdParam)
+    } catch (err) {
       try {
-        ponto = $app.findFirstRecordByData('pontos', 'nome', pontoId)
-      } catch (errNome) {
-        return e.json(404, { error: 'Ponto não encontrado: ' + pontoId })
+        ponto = $app.findFirstRecordByData('pontos', 'slug', pontoIdParam)
+      } catch (errSlug) {
+        try {
+          ponto = $app.findFirstRecordByData('pontos', 'nome', pontoIdParam)
+        } catch (errNome) {
+          return e.json(404, { error: 'Ponto não encontrado: ' + pontoIdParam })
+        }
       }
     }
-  }
 
-  const lat = ponto.get('lat')
-  const lon = ponto.get('lon')
+    pontoId = ponto.id || pontoIdParam
+    pontoNome = ponto.get('nome')
+    lat = ponto.get('lat')
+    lon = ponto.get('lon')
+    pontoTipo = ponto.get('tipo') || 'abrigado'
+  } else {
+    return e.json(400, { error: "Informe 'ponto_id' ou as coordenadas 'lat', 'lon' e 'tipo'" })
+  }
 
   // 2. Verifica se existe cache_previsao para esse ponto_id com obtido_em < 30 minutos atrás
   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString().replace('T', ' ')
@@ -102,6 +140,18 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     })
   }
 
+  // Verificação de erro da API Marine (Open-Meteo retorna 400 ou erro quando coordenada está em terra ou fora de água)
+  if (
+    marineRes.statusCode === 400 ||
+    marineRes.statusCode === 404 ||
+    marineRes.statusCode === 422
+  ) {
+    return e.json(400, {
+      error: 'esta posição parece estar em terra — ajuste para o mar',
+      detail: marineRes.json || marineRes.body,
+    })
+  }
+
   if (marineRes.statusCode !== 200) {
     return e.json(502, { error: 'API marítima retornou status ' + marineRes.statusCode })
   }
@@ -111,6 +161,14 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
   if (!weatherData || !weatherData.hourly || !weatherData.hourly.time) {
     return e.json(502, { error: 'Dados meteorológicos inválidos ou incompletos' })
+  }
+
+  // Se a API marine retornar hourly vazio ou wave_height com todos nulos por ser em terra
+  const mHourly = marineData && marineData.hourly ? marineData.hourly : null
+  if (!mHourly || !mHourly.time || mHourly.time.length === 0) {
+    return e.json(400, {
+      error: 'esta posição parece estar em terra — ajuste para o mar',
+    })
   }
 
   // Map de dados marítimos por hora (time)
@@ -323,19 +381,15 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     const b = 2 - a + Math.floor(a / 4)
     const jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524.5
 
-    // T = séculos julianos desde J2000.0 (JD 2451545.0)
     const T = (jd - 2451545.0) / 36525.0
 
-    // Elongação média da Lua D (graus)
     let D =
       297.8501921 +
       445267.1114034 * T -
       0.0018819 * T * T +
       (T * T * T) / 545868.0 -
       (T * T * T * T) / 113065000.0
-    // Anomalia média do Sol M (graus)
     let M = 357.5291092 + 35999.0502909 * T - 0.0001536 * T * T + (T * T * T) / 24490000.0
-    // Anomalia média da Lua M' (graus)
     let Mprime =
       134.9633964 +
       477198.8675055 * T +
@@ -344,7 +398,6 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       (T * T * T * T) / 14712000.0
 
     const deg2rad = Math.PI / 180.0
-    // Ângulo de fase astronômico i
     let phaseAngleDeg =
       180 -
       D -
@@ -355,11 +408,9 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       0.214 * Math.sin(2 * Mprime * deg2rad) -
       0.11 * Math.sin(D * deg2rad)
 
-    // Normalizar D entre 0 e 360
     D = ((D % 360) + 360) % 360
-    const phaseValue = D / 360.0 // 0 a 1 (0 = Nova, 0.5 = Cheia)
+    const phaseValue = D / 360.0
 
-    // Fração iluminada k = (1 + cos(i)) / 2
     let iRad = phaseAngleDeg * deg2rad
     let fraction = (1 + Math.cos(iRad)) / 2.0
     let illuminationPct = Math.round(fraction * 100)
@@ -407,7 +458,6 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
   // 4. Crepúsculo Náutico matutino e vespertino (sol 12° abaixo do horizonte -> zenith = 102°)
   const getNauticalTwilight = (date, latitude, longitude) => {
-    // Algoritmo solar NOAA / Meeus para sol no zênite de 102 graus
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -415,13 +465,11 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     const rad = Math.PI / 180.0
     const deg = 180.0 / Math.PI
 
-    // Dia do ano N
     const N1 = Math.floor((275 * month) / 9)
     const N2 = Math.floor((month + 9) / 12)
     const N3 = 1 + Math.floor((year - 4 * Math.floor(year / 4) + 2) / 3)
     const N = N1 - N2 * N3 + day - 30
 
-    // Longitude para horas
     const lngHour = longitude / 15.0
 
     const calcTime = (isMorning) => {
@@ -436,17 +484,17 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       const Lquadrant = Math.floor(L / 90) * 90
       const RAquadrant = Math.floor(RA / 90) * 90
       RA = RA + (Lquadrant - RAquadrant)
-      RA = RA / 15.0 // horas
+      RA = RA / 15.0
 
       const sinDec = 0.39782 * Math.sin(L * rad)
       const cosDec = Math.cos(Math.asin(sinDec))
 
-      const zenith = 102.0 // Náutico (12 graus abaixo)
+      const zenith = 102.0
       const cosH =
         (Math.cos(zenith * rad) - sinDec * Math.sin(latitude * rad)) /
         (cosDec * Math.cos(latitude * rad))
 
-      if (cosH > 1 || cosH < -1) return null // Sem crepúsculo (sol da meia noite ou noite polar)
+      if (cosH > 1 || cosH < -1) return null
 
       let H
       if (isMorning) {
@@ -460,7 +508,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       let UT = T - lngHour
       UT = ((UT % 24) + 24) % 24
 
-      const localHours = UT - 3.0 // Horário de Brasília UTC-3
+      const localHours = UT - 3.0
       const adjustedHours = ((localHours % 24) + 24) % 24
 
       const h = Math.floor(adjustedHours)
@@ -483,7 +531,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
   const twilight = getNauticalTwilight(now, lat, lon)
 
-  // 5. Distância e rumo verdadeiro para os outros 3 pontos
+  // 5. Distância e rumo verdadeiro para os 4 pontos canônicos
   const PONTOS_CANONICOS = [
     { slug: 'angra', nome: 'Angra dos Reis', lat: -23.0067, lon: -44.318 },
     { slug: 'abraao', nome: 'Abraão (Ilha Grande)', lat: -23.1415, lon: -44.1676 },
@@ -491,7 +539,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     { slug: 'juatinga', nome: 'Juatinga', lat: -23.2833, lon: -44.5833 },
   ]
 
-  const getCardinalLabel = (deg) => {
+  const getCardinalLabel = (degVal) => {
     const dirs = [
       'N',
       'NNE',
@@ -510,7 +558,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       'NW',
       'NNW',
     ]
-    const idx = Math.round((((deg % 360) + 360) % 360) / 22.5) % 16
+    const idx = Math.round((((degVal % 360) + 360) % 360) / 22.5) % 16
     return dirs[idx]
   }
 
@@ -520,7 +568,6 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
   for (let i = 0; i < PONTOS_CANONICOS.length; i++) {
     const pTarget = PONTOS_CANONICOS[i]
-    // Se for o mesmo ponto (distância ~0), pula
     const dLat = (pTarget.lat - lat) * rad
     const dLon = (pTarget.lon - lon) * rad
     const lat1 = lat * rad
@@ -532,13 +579,13 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
     const cVal = 2 * Math.atan2(Math.sqrt(aH), Math.sqrt(1 - aH))
     const distKm = 6371 * cVal
-    const distNm = distKm * 0.539957 // km para milhas náuticas
+    const distNm = distKm * 0.539957
 
     if (distNm < 0.3) {
-      continue // é o próprio ponto
+      continue
     }
 
-    // Rumo verdadeiro (bearing inicial)
+    // Bearing
     const yB = Math.sin(dLon) * Math.cos(lat2)
     const xB = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
     let bearingDeg = deg * Math.atan2(yB, xB)
@@ -580,8 +627,8 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
   const resultPayload = {
     ponto_id: pontoId,
-    ponto_nome: ponto.get('nome'),
-    ponto_tipo: ponto.get('tipo'),
+    ponto_nome: pontoNome,
+    ponto_tipo: pontoTipo,
     lat: lat,
     lon: lon,
     timezone: weatherData.timezone || 'America/Sao_Paulo',
@@ -610,19 +657,27 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     rotas: rotas,
   }
 
-  // 4. Salva no cache_previsao
+  // 4. Salva no cache_previsao via UPSERT
+  const nowIso = new Date().toISOString().replace('T', ' ')
   try {
-    const cacheCol = $app.findCollectionByNameOrId('cache_previsao')
-    const cacheRecord = new Record(cacheCol)
-    const nowIso = new Date().toISOString().replace('T', ' ')
-
-    cacheRecord.set('ponto_id', pontoId)
-    cacheRecord.set('payload', resultPayload)
-    cacheRecord.set('obtido_em', nowIso)
-
-    $app.save(cacheRecord)
-  } catch (saveErr) {
-    // Log se necessário, mas devolve o payload mesmo se o cache falhar ao salvar
+    const existing = $app.findFirstRecordByData('cache_previsao', 'ponto_id', pontoId)
+    existing.set('payload', resultPayload)
+    existing.set('obtido_em', nowIso)
+    $app.save(existing)
+  } catch (findErr) {
+    try {
+      const cacheCol = $app.findCollectionByNameOrId('cache_previsao')
+      const cacheRecord = new Record(cacheCol)
+      cacheRecord.set('ponto_id', pontoId)
+      cacheRecord.set('payload', resultPayload)
+      cacheRecord.set('obtido_em', nowIso)
+      $app.save(cacheRecord)
+    } catch (saveErr) {
+      console.log(
+        'Erro ao salvar cache_previsao:',
+        saveErr && saveErr.message ? saveErr.message : String(saveErr),
+      )
+    }
   }
 
   return e.json(200, resultPayload)

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T00:45:39.682Z",
+  "generatedAt": "2026-08-27T01:02:59.128Z",
   "collections": [
     {
       "name": "users",
@@ -246,21 +246,20 @@
       "fields": [
         {
           "name": "ponto_id",
-          "type": "relation",
+          "type": "text",
           "required": true,
-          "system": false,
-          "collectionRef": "pontos"
+          "system": false
         },
         {
           "name": "payload",
           "type": "json",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
           "name": "obtido_em",
           "type": "date",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -278,9 +277,7 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_cache_ponto_obtido ON cache_previsao (ponto_id, obtido_em DESC)"
-      ]
+      "indexes": ["CREATE UNIQUE INDEX idx_cache_previsao_ponto_id ON cache_previsao (ponto_id)"]
     }
   ]
 }

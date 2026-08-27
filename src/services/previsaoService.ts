@@ -7,6 +7,8 @@ import {
   ResumoDiaItem,
   JanelasPayload,
   PreferenciasUsuario,
+  PontoPersonalizado,
+  TipoPonto,
 } from '@/types/nautico'
 
 export async function fetchPerfis(): Promise<PerfilNavegacao[]> {
@@ -98,9 +100,36 @@ export async function fetchPontos(): Promise<Ponto[]> {
   }
 }
 
-export async function fetchPrevisaoPorPonto(pontoId: string): Promise<PrevisaoPayload> {
+/**
+ * Normaliza tipo de ponto personalizado para o tipo do backend (abrigado/semi/aberto)
+ */
+export function normalizarTipoParaBackend(tipo: string): TipoPonto {
+  const t = tipo.toLowerCase().trim()
+  if (t === 'semi' || t === 'semi-abrigado') return 'semi'
+  if (t === 'aberto' || t === 'mar aberto' || t === 'mar-aberto') return 'aberto'
+  return 'abrigado'
+}
+
+/**
+ * Busca previsão de um ponto fixo ou personalizado
+ */
+export async function fetchPrevisaoPorPonto(
+  pontoId: string,
+  customCoords?: { lat: number; lon: number; tipo: string; nome?: string },
+): Promise<PrevisaoPayload> {
   const backendUrl = pb.baseUrl || ''
-  const url = `${backendUrl}/backend/v1/previsao?ponto_id=${encodeURIComponent(pontoId)}`
+  let url = ''
+
+  if (customCoords) {
+    const tipoNorm = normalizarTipoParaBackend(customCoords.tipo)
+    url = `${backendUrl}/backend/v1/previsao?lat=${encodeURIComponent(
+      customCoords.lat,
+    )}&lon=${encodeURIComponent(customCoords.lon)}&tipo=${encodeURIComponent(tipoNorm)}&nome=${encodeURIComponent(
+      customCoords.nome || '',
+    )}`
+  } else {
+    url = `${backendUrl}/backend/v1/previsao?ponto_id=${encodeURIComponent(pontoId)}`
+  }
 
   const res = await fetch(url)
   if (!res.ok) {
@@ -120,11 +149,29 @@ export async function fetchPrevisaoPorPonto(pontoId: string): Promise<PrevisaoPa
   return data
 }
 
-export async function fetchJanelas(pontoId: string, perfilId: string): Promise<JanelasPayload> {
+/**
+ * Busca janelas ideais de navegação para um ponto fixo ou personalizado
+ */
+export async function fetchJanelas(
+  pontoId: string,
+  perfilId: string,
+  customCoords?: { lat: number; lon: number; tipo: string; nome?: string },
+): Promise<JanelasPayload> {
   const backendUrl = pb.baseUrl || ''
-  const url = `${backendUrl}/backend/v1/janelas?ponto_id=${encodeURIComponent(
-    pontoId,
-  )}&perfil_id=${encodeURIComponent(perfilId)}`
+  let url = ''
+
+  if (customCoords) {
+    const tipoNorm = normalizarTipoParaBackend(customCoords.tipo)
+    url = `${backendUrl}/backend/v1/janelas?lat=${encodeURIComponent(
+      customCoords.lat,
+    )}&lon=${encodeURIComponent(customCoords.lon)}&tipo=${encodeURIComponent(
+      tipoNorm,
+    )}&perfil_id=${encodeURIComponent(perfilId)}&nome=${encodeURIComponent(customCoords.nome || '')}`
+  } else {
+    url = `${backendUrl}/backend/v1/janelas?ponto_id=${encodeURIComponent(
+      pontoId,
+    )}&perfil_id=${encodeURIComponent(perfilId)}`
+  }
 
   const res = await fetch(url)
   if (!res.ok) {
@@ -221,7 +268,6 @@ export function getProximaJanela(
   const now = new Date()
   const nowTime = now.getTime()
 
-  // Encontra a primeira janela cujo término é após agora
   for (const j of janelas) {
     const fimDate = new Date(j.fim).getTime()
     if (fimDate >= nowTime - 3600000) {
@@ -252,7 +298,6 @@ export function formatarJanelaBadge(inicioIso: string, fimIso: string): string {
 
 /**
  * Converte nós de vento para escala Beaufort (0-12)
- * 0-1kt=0, 1-3kt=1, 4-6kt=2, 7-10kt=3, 11-16kt=4, 17-21kt=5, 22-27kt=6, 28-33kt=7, 34-40kt=8, 41-47kt=9, 48-55kt=10, 56-63kt=11, 64+kt=12
  */
 export function getBeaufortScale(windKt: number | null | undefined): number {
   if (windKt === null || windKt === undefined || isNaN(windKt)) return 0
@@ -274,7 +319,6 @@ export function getBeaufortScale(windKt: number | null | undefined): number {
 
 /**
  * Converte metros de onda para escala Douglas (0-9)
- * 0m=0, 0-0.1m=1, 0.1-0.5m=2, 0.5-1.25m=3, 1.25-2.5m=4, 2.5-4m=5, 4-6m=6, 6-9m=7, 9-14m=8, 14+m=9
  */
 export function getDouglasScale(waveM: number | null | undefined): {
   grau: number
@@ -318,6 +362,59 @@ export function formatCoordinatesDMM(lat: number, lon: number): string {
 }
 
 /**
+ * Parser de entrada de coordenadas (decimal ou Graus/Minutos)
+ * Suporta:
+ * - "-23.1234, -44.1234"
+ * - "-23.1234 -44.1234"
+ * - "23°07.40'S 044°19.08'W"
+ * - "23° 07.40' S, 44° 19.08' W"
+ * - "23 07.40 S, 044 19.08 W"
+ */
+export function parseCoordinatesInput(input: string): { lat: number; lon: number } | null {
+  if (!input) return null
+  const str = input.trim()
+
+  // 1. Tenta formato decimal simples: -23.1234, -44.1234 ou -23.1234 -44.1234
+  const decimalRegex = /^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/
+  const decMatch = str.match(decimalRegex)
+  if (decMatch) {
+    const lat = parseFloat(decMatch[1])
+    const lon = parseFloat(decMatch[2])
+    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { lat, lon }
+    }
+  }
+
+  // 2. Tenta formato Graus e Minutos Decimais (DMM): ex "23°07.40'S 044°19.08'W" ou "23 07.40 S 044 19.08 W"
+  // Lat: (\d{1,2})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([NSns])
+  // Lon: (\d{1,3})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([EWewOo])
+  const dmmRegex =
+    /(\d{1,2})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([NSns])[,\s]+(\d{1,3})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([EWewOo])/
+  const dmmMatch = str.match(dmmRegex)
+  if (dmmMatch) {
+    const latDeg = parseFloat(dmmMatch[1])
+    const latMin = parseFloat(dmmMatch[2])
+    const latHemi = dmmMatch[3].toUpperCase()
+
+    const lonDeg = parseFloat(dmmMatch[4])
+    const lonMin = parseFloat(dmmMatch[5])
+    const lonHemi = dmmMatch[6].toUpperCase()
+
+    let lat = latDeg + latMin / 60
+    if (latHemi === 'S') lat = -lat
+
+    let lon = lonDeg + lonMin / 60
+    if (lonHemi === 'W' || lonHemi === 'O') lon = -lon
+
+    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { lat, lon }
+    }
+  }
+
+  return null
+}
+
+/**
  * Formata duração em segundos para string legível: "11h 45min"
  */
 export function formatDaylightDuration(seconds: number | null | undefined): string {
@@ -351,21 +448,16 @@ export function formatTimeHHMM(isoString: string | null | undefined): string {
 export function getCurrentHourForecast(hourly: PrevisaoHoraItem[]): PrevisaoHoraItem | null {
   if (!hourly || hourly.length === 0) return null
 
-  // Obter hora atual local (UTC-3 / America/Sao_Paulo)
   const now = new Date()
-
-  // Format local YYYY-MM-DDTHH
   const nowYear = now.getFullYear()
   const nowMonth = String(now.getMonth() + 1).padStart(2, '0')
   const nowDate = String(now.getDate()).padStart(2, '0')
   const nowHours = String(now.getHours()).padStart(2, '0')
   const targetPrefix = `${nowYear}-${nowMonth}-${nowDate}T${nowHours}:00`
 
-  // Busca exata pela hora
   const exact = hourly.find((item) => item.time.startsWith(targetPrefix))
   if (exact) return exact
 
-  // Se não encontrou exato (ex: virada de dia ou fuso), encontra a hora com menor diferença temporal absoluta
   const nowMs = now.getTime()
   let closestItem: PrevisaoHoraItem = hourly[0]
   let minDiff = Infinity
@@ -511,12 +603,11 @@ export function getNext48HoursForecast(hourly: PrevisaoHoraItem[]): {
     }
   }
 
-  // Pegamos até 48 horas a partir do startIndex
   const items = hourly.slice(startIndex, startIndex + 48)
 
   return {
     items,
-    currentHourIndex: 0, // Como começa na hora atual, o índice 0 é a hora atual
+    currentHourIndex: 0,
   }
 }
 
@@ -536,7 +627,6 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
     6: 'Sáb',
   }
 
-  // Agrupar por data (YYYY-MM-DD)
   const grupos: Record<string, PrevisaoHoraItem[]> = {}
   for (const item of hourly) {
     const dateKey = item.time.slice(0, 10)
@@ -550,20 +640,17 @@ export function aggregate7DaysForecast(hourly: PrevisaoHoraItem[]): ResumoDiaIte
   const now = new Date()
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-  // Encontra ou filtra a partir de hoje (ou primeiras datas se hoje for anterior)
   let validDates = sortedDates.filter((d) => d >= todayKey)
   if (validDates.length === 0) {
     validDates = sortedDates
   }
 
-  // Pega no máximo 7 dias
   const targetDates = validDates.slice(0, 7)
 
   return targetDates.map((dateStr, idx) => {
     const items = grupos[dateStr] || []
     const isHoje = idx === 0 || dateStr === todayKey
 
-    // Criar objeto Date para obter dia da semana e formatar
     const [year, month, day] = dateStr.split('-').map(Number)
     const dateObj = new Date(year, month - 1, day)
     const nomeDia = isHoje ? 'Hoje' : diasSemanaMap[dateObj.getDay()] || ''
@@ -610,7 +697,54 @@ export function formatTipoPonto(tipo: string): string {
   const map: Record<string, string> = {
     abrigado: 'Abrigado',
     semi: 'Semi-abrigado',
-    aberto: 'Aberto',
+    'semi-abrigado': 'Semi-abrigado',
+    aberto: 'Mar aberto',
+    'mar aberto': 'Mar aberto',
   }
-  return map[tipo] || tipo
+  return map[tipo.toLowerCase()] || tipo
+}
+
+/**
+ * Calcula rotas (distância e rumo verdadeiro) entre uma origem e uma lista de destinos
+ */
+export function calcularRotasNauticas(
+  origem: { lat: number; lon: number },
+  destinos: Array<{ slug: string; nome: string; lat: number; lon: number }>,
+) {
+  const rad = Math.PI / 180.0
+  const deg = 180.0 / Math.PI
+  const rotas = []
+
+  for (const d of destinos) {
+    const dLat = (d.lat - origem.lat) * rad
+    const dLon = (d.lon - origem.lon) * rad
+    const lat1 = origem.lat * rad
+    const lat2 = d.lat * rad
+
+    const aH =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const cVal = 2 * Math.atan2(Math.sqrt(aH), Math.sqrt(1 - aH))
+    const distKm = 6371 * cVal
+    const distNm = distKm * 0.539957
+
+    if (distNm < 0.2) continue
+
+    const yB = Math.sin(dLon) * Math.cos(lat2)
+    const xB = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+    let bearingDeg = deg * Math.atan2(yB, xB)
+    bearingDeg = ((bearingDeg % 360) + 360) % 360
+
+    rotas.push({
+      ponto_slug: d.slug,
+      ponto_nome: d.nome,
+      lat: d.lat,
+      lon: d.lon,
+      distancia_nm: Math.round(distNm * 10) / 10,
+      rumo_graus: Math.round(bearingDeg),
+      direcao_cardinal: getWindDirectionLabel(bearingDeg),
+    })
+  }
+
+  return rotas
 }

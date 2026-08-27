@@ -129,11 +129,23 @@ export interface UltimoBriefingStorage {
   timestamp: string
 }
 
+export type TipoPontoPersonalizado = 'abrigado' | 'semi-abrigado' | 'mar aberto'
+
+export interface PontoPersonalizado {
+  id: string
+  nome: string
+  lat: number
+  lon: number
+  tipo: TipoPontoPersonalizado
+  criado_em: string
+}
+
 export interface PreferenciasStorage {
   perfil_id: string
   ponto_favorito_slug: string
   horario_briefing: string
   ultimo_briefing: UltimoBriefingStorage | null
+  pontos_personalizados?: PontoPersonalizado[]
 }
 
 export interface PreferenciasUsuario {
@@ -209,4 +221,5 @@ export interface PontoEstadoPrevisao {
   loadingJanelas?: boolean
   currentScore?: number | null
   proximaJanela?: JanelaNavegacao | null
+  isPersonalizado?: boolean
 }

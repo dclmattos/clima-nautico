@@ -1,44 +1,84 @@
 routerAdd('GET', '/backend/v1/janelas', (e) => {
-  const pontoId = e.requestInfo().query['ponto_id']
-  const perfilId = e.requestInfo().query['perfil_id']
+  const query = e.requestInfo().query || {}
+  const pontoIdParam = query['ponto_id']
+  const perfilIdParam = query['perfil_id']
+  const latParam = query['lat']
+  const lonParam = query['lon']
+  const tipoParam = query['tipo']
+  const nomeParam = query['nome']
 
-  if (!pontoId || !perfilId) {
-    return e.json(400, { error: "Parâmetros 'ponto_id' e 'perfil_id' são obrigatórios" })
+  if (!perfilIdParam) {
+    return e.json(400, { error: "Parâmetro 'perfil_id' é obrigatório" })
   }
 
-  // 1. Busca o ponto no PocketBase (por id, por slug ou pelo campo nome caso passado slug como "angra")
-  let ponto
-  try {
-    ponto = $app.findRecordById('pontos', pontoId)
-  } catch (err) {
-    try {
-      ponto = $app.findFirstRecordByData('pontos', 'slug', pontoId)
-    } catch (errSlug) {
-      try {
-        ponto = $app.findFirstRecordByData('pontos', 'nome', pontoId)
-      } catch (errNome) {
-        return e.json(404, { error: 'Ponto não encontrado: ' + pontoId })
-      }
-    }
-  }
-
-  // 2. Busca o perfil no PocketBase (por id ou pelo campo nome)
+  // 1. Busca o perfil no PocketBase (por id ou pelo campo nome)
   let perfil
   try {
-    perfil = $app.findRecordById('perfis_navegacao', perfilId)
+    perfil = $app.findRecordById('perfis_navegacao', perfilIdParam)
   } catch (err) {
     try {
-      perfil = $app.findFirstRecordByData('perfis_navegacao', 'nome', perfilId)
+      perfil = $app.findFirstRecordByData('perfis_navegacao', 'nome', perfilIdParam)
     } catch (err2) {
-      return e.json(404, { error: 'Perfil não encontrado: ' + perfilId })
+      return e.json(404, { error: 'Perfil não encontrado: ' + perfilIdParam })
     }
   }
 
-  const realPontoId = ponto.id || pontoId
-  const realPerfilId = perfil.id || perfilId
-  const lat = ponto.get('lat')
-  const lon = ponto.get('lon')
-  const pontoTipo = ponto.get('tipo') || 'abrigado'
+  const realPerfilId = perfil.id || perfilIdParam
+  const perfilNome = perfil.get('nome') || perfilIdParam
+
+  let realPontoId = ''
+  let pontoNome = ''
+  let lat = null
+  let lon = null
+  let pontoTipo = 'abrigado'
+
+  if (latParam !== undefined && lonParam !== undefined) {
+    const parsedLat = parseFloat(latParam)
+    const parsedLon = parseFloat(lonParam)
+
+    if (isNaN(parsedLat) || isNaN(parsedLon)) {
+      return e.json(400, { error: 'Coordenadas lat/lon inválidas' })
+    }
+
+    lat = parsedLat
+    lon = parsedLon
+    const latFormatted = lat.toFixed(3)
+    const lonFormatted = lon.toFixed(3)
+    realPontoId = 'custom:' + latFormatted + ':' + lonFormatted
+    pontoNome = (nomeParam || '').trim() || 'Ponto Personalizado'
+
+    const rawTipo = (tipoParam || '').trim().toLowerCase()
+    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado') {
+      pontoTipo = 'semi'
+    } else if (rawTipo === 'aberto' || rawTipo === 'mar aberto' || rawTipo === 'mar-aberto') {
+      pontoTipo = 'aberto'
+    } else {
+      pontoTipo = 'abrigado'
+    }
+  } else if (pontoIdParam) {
+    let ponto
+    try {
+      ponto = $app.findRecordById('pontos', pontoIdParam)
+    } catch (err) {
+      try {
+        ponto = $app.findFirstRecordByData('pontos', 'slug', pontoIdParam)
+      } catch (errSlug) {
+        try {
+          ponto = $app.findFirstRecordByData('pontos', 'nome', pontoIdParam)
+        } catch (errNome) {
+          return e.json(404, { error: 'Ponto não encontrado: ' + pontoIdParam })
+        }
+      }
+    }
+
+    realPontoId = ponto.id || pontoIdParam
+    pontoNome = ponto.get('nome')
+    lat = ponto.get('lat')
+    lon = ponto.get('lon')
+    pontoTipo = ponto.get('tipo') || 'abrigado'
+  } else {
+    return e.json(400, { error: "Informe 'ponto_id' ou as coordenadas 'lat', 'lon' e 'tipo'" })
+  }
 
   const perfilVentoMax = Number(perfil.get('vento_max_kt')) || 15
   const perfilRajadaMax = Number(perfil.get('rajada_max_kt')) || 22
@@ -50,7 +90,7 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       : null
   const perfilChuvaMax = Number(perfil.get('chuva_max_mm_h')) || 4.0
 
-  // 3. Cache: chave ponto_id + "|janelas|" + perfil_id
+  // 3. Cache: chave realPontoId + "|janelas|" + realPerfilId
   const cacheKey = realPontoId + '|janelas|' + realPerfilId
   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString().replace('T', ' ')
   try {
@@ -74,7 +114,6 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
   }
 
   // 4. Consulta endpoints do Open-Meteo com forecast_days=3 (72 horas)
-  // Inclui daily=sunrise,sunset para detecção diurna precisa de janelas
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
@@ -128,6 +167,18 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     })
   }
 
+  // Verificação de erro da API Marine (terra)
+  if (
+    marineRes.statusCode === 400 ||
+    marineRes.statusCode === 404 ||
+    marineRes.statusCode === 422
+  ) {
+    return e.json(400, {
+      error: 'esta posição parece estar em terra — ajuste para o mar',
+      detail: marineRes.json || marineRes.body,
+    })
+  }
+
   if (marineRes.statusCode !== 200) {
     return e.json(502, { error: 'API marítima retornou status ' + marineRes.statusCode })
   }
@@ -137,6 +188,13 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
 
   if (!weatherData || !weatherData.hourly || !weatherData.hourly.time) {
     return e.json(502, { error: 'Dados meteorológicos inválidos ou incompletos' })
+  }
+
+  const mHourly = marineData && marineData.hourly ? marineData.hourly : null
+  if (!mHourly || !mHourly.time || mHourly.time.length === 0) {
+    return e.json(400, {
+      error: 'esta posição parece estar em terra — ajuste para o mar',
+    })
   }
 
   // Mapeamento diário de sunrise e sunset por data (YYYY-MM-DD)
@@ -154,19 +212,16 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     }
   }
 
-  // Helper para verificar se um timestamp de hora cai no período diurno (entre sunrise e sunset)
+  // Helper para verificar período diurno
   const isDaylightHour = (timeIso) => {
     const hourTime = new Date(timeIso).getTime()
     const dayKey = timeIso.slice(0, 10)
     const daySun = sunMap[dayKey]
     if (daySun && daySun.sunrise && daySun.sunset) {
-      // Considera a hora diurna se o horário estiver entre o nascer e o pôr do sol
-      // Permitimos uma tolerância de 30 minutos em torno do sunrise/sunset
       return (
         hourTime >= daySun.sunrise - 30 * 60 * 1000 && hourTime <= daySun.sunset + 30 * 60 * 1000
       )
     }
-    // Fallback padrão se não houver daily: entre 06:00 e 18:00
     const hour = new Date(timeIso).getHours()
     return hour >= 6 && hour < 18
   }
@@ -254,35 +309,30 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     let penalidadePeriodo = 0
     let penalidadeChuva = 0
 
-    // Vento: se wind_speed_10m > vento_max_kt, subtraia min(50, (wind_speed_10m - vento_max_kt) / vento_max_kt * 50). Arredonde para inteiro.
     if (windSpeed !== null && windSpeed > perfilVentoMax) {
       penalidadeVento = Math.round(
         Math.min(50, ((windSpeed - perfilVentoMax) / perfilVentoMax) * 50),
       )
     }
 
-    // Rajada: se wind_gusts_10m > rajada_max_kt, subtraia min(40, (wind_gusts_10m - rajada_max_kt) / rajada_max_kt * 40).
     if (windGusts !== null && windGusts > perfilRajadaMax) {
       penalidadeRajada = Math.round(
         Math.min(40, ((windGusts - perfilRajadaMax) / perfilRajadaMax) * 40),
       )
     }
 
-    // Onda: se wave_height > onda_max_m, subtraia min(50, (wave_height - onda_max_m) / (onda_max_m * 2) * 50).
     if (waveHeight !== null && waveHeight > perfilOndaMax) {
       penalidadeOnda = Math.round(
         Math.min(50, ((waveHeight - perfilOndaMax) / (perfilOndaMax * 2)) * 50),
       )
     }
 
-    // Período: se periodo_min_s não for nulo e wave_period < periodo_min_s, subtraia min(30, (periodo_min_s - wave_period) / periodo_min_s * 30).
     if (perfilPeriodoMin !== null && wavePeriod !== null && wavePeriod < perfilPeriodoMin) {
       penalidadePeriodo = Math.round(
         Math.min(30, ((perfilPeriodoMin - wavePeriod) / perfilPeriodoMin) * 30),
       )
     }
 
-    // Chuva: se precipitation > chuva_max_mm_h, subtraia min(30, (precipitation - chuva_max_mm_h) / chuva_max_mm_h * 30).
     if (precipitation !== null && precipitation > perfilChuvaMax) {
       penalidadeChuva = Math.round(
         Math.min(30, ((precipitation - perfilChuvaMax) / perfilChuvaMax) * 30),
@@ -298,11 +348,9 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       penalidadeChuva
     score = score - exposicaoDeducao
 
-    // Clamp 0-100
     if (score < 0) score = 0
     if (score > 100) score = 100
 
-    // Fator limitante (o que mais penalizou): "vento", "rajada", "onda", "período", "chuva", ou null se score >= 90
     let fatorLimitante = null
     let fatorLimitanteDesc = null
 
@@ -335,7 +383,6 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
         },
       ]
 
-      // Encontra a maior penalidade estritamente > 0
       let maxPen = 0
       let chosen = null
       for (let pIdx = 0; pIdx < penalidades.length; pIdx++) {
@@ -349,7 +396,6 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
         fatorLimitante = chosen.tipo
         fatorLimitanteDesc = chosen.desc
       } else if (exposicaoDeducao > 0) {
-        // Se a penalidade foi apenas por exposição
         fatorLimitante = 'exposição'
         fatorLimitanteDesc = 'ponto ' + pontoTipo
       }
@@ -382,9 +428,6 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
   }
 
   // 5. Detecção de janelas ideais
-  // Restrita ao período diurno de cada dia (de nascer do sol a pôr do sol)
-  // Bloco contíguo de horas onde TODAS as horas têm score >= 70 e caem no período diurno.
-  // Duração mínima = 3 horas consecutivas.
   const janelas = []
   let currentJanela = []
 
@@ -448,32 +491,39 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     }
   }
 
-  // Se terminou o loop com janela aberta >= 3
   finalizeJanela()
 
   const resultPayload = {
     ponto_id: realPontoId,
-    ponto_nome: ponto.get('nome'),
+    ponto_nome: pontoNome,
     ponto_tipo: pontoTipo,
     perfil_id: realPerfilId,
-    perfil_nome: perfil.get('nome'),
+    perfil_nome: perfilNome,
     hourly_scores: hourlyScores,
     janelas: janelas,
   }
 
-  // 6. Salva no cache_previsao
+  // 6. Salva no cache_previsao via UPSERT
+  const nowIso = new Date().toISOString().replace('T', ' ')
   try {
-    const cacheCol = $app.findCollectionByNameOrId('cache_previsao')
-    const cacheRecord = new Record(cacheCol)
-    const nowIso = new Date().toISOString().replace('T', ' ')
-
-    cacheRecord.set('ponto_id', cacheKey)
-    cacheRecord.set('payload', resultPayload)
-    cacheRecord.set('obtido_em', nowIso)
-
-    $app.save(cacheRecord)
-  } catch (saveErr) {
-    // Silently continue if cache save fails
+    const existing = $app.findFirstRecordByData('cache_previsao', 'ponto_id', cacheKey)
+    existing.set('payload', resultPayload)
+    existing.set('obtido_em', nowIso)
+    $app.save(existing)
+  } catch (findErr) {
+    try {
+      const cacheCol = $app.findCollectionByNameOrId('cache_previsao')
+      const cacheRecord = new Record(cacheCol)
+      cacheRecord.set('ponto_id', cacheKey)
+      cacheRecord.set('payload', resultPayload)
+      cacheRecord.set('obtido_em', nowIso)
+      $app.save(cacheRecord)
+    } catch (saveErr) {
+      console.log(
+        'Erro ao salvar cache_previsao janelas:',
+        saveErr && saveErr.message ? saveErr.message : String(saveErr),
+      )
+    }
   }
 
   return e.json(200, resultPayload)

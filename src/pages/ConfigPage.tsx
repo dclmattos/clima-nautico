@@ -1,19 +1,45 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePerfil } from '@/contexts/PerfilContext'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { useToast } from '@/hooks/use-toast'
 import {
   PREFS_STORAGE_KEY,
+  MAX_PONTOS_PERSONALIZADOS,
   getStoredPreferences,
   setStoredPreferences,
+  getPontosPersonalizados,
+  addPontoPersonalizado,
+  updatePontoPersonalizado,
+  deletePontoPersonalizado,
 } from '@/lib/preferencesStorage'
-import { PreferenciasStorage } from '@/types/nautico'
+import { PreferenciasStorage, PontoPersonalizado, TipoPontoPersonalizado } from '@/types/nautico'
+import {
+  parseCoordinatesInput,
+  formatCoordinatesDMM,
+  fetchPrevisaoPorPonto,
+} from '@/services/previsaoService'
 import {
   Settings,
   ArrowLeft,
@@ -30,6 +56,14 @@ import {
   Zap,
   Download,
   Upload,
+  MapPin,
+  Plus,
+  Pencil,
+  Trash2,
+  Navigation,
+  Loader2,
+  AlertCircle,
+  Compass,
 } from 'lucide-react'
 
 export const ConfigPage: React.FC = () => {
@@ -37,6 +71,209 @@ export const ConfigPage: React.FC = () => {
   const { perfil, perfis, setPerfil, deviceId, loading, reload } = usePerfil()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Meus Pontos Personalizados
+  const [pontosCustom, setPontosCustom] = useState<PontoPersonalizado[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingPonto, setEditingPonto] = useState<PontoPersonalizado | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  // Form states
+  const [formNome, setFormNome] = useState('')
+  const [formCoordsStr, setFormCoordsStr] = useState('')
+  const [formTipo, setFormTipo] = useState<TipoPontoPersonalizado>('abrigado')
+  const [formLat, setFormLat] = useState<number | null>(null)
+  const [formLon, setFormLon] = useState<number | null>(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [savingPonto, setSavingPonto] = useState(false)
+  const [formErro, setFormErro] = useState<string | null>(null)
+
+  const reloadPontos = () => {
+    setPontosCustom(getPontosPersonalizados())
+  }
+
+  useEffect(() => {
+    reloadPontos()
+  }, [])
+
+  const handleOpenAddModal = () => {
+    if (pontosCustom.length >= MAX_PONTOS_PERSONALIZADOS) {
+      toast({
+        title: 'Limite atingido',
+        description: `Máximo de ${MAX_PONTOS_PERSONALIZADOS} pontos atingido.`,
+        variant: 'destructive',
+      })
+      return
+    }
+    setEditingPonto(null)
+    setFormNome('')
+    setFormCoordsStr('')
+    setFormLat(null)
+    setFormLon(null)
+    setFormTipo('abrigado')
+    setFormErro(null)
+    setModalOpen(true)
+  }
+
+  const handleOpenEditModal = (p: PontoPersonalizado) => {
+    setEditingPonto(p)
+    setFormNome(p.nome)
+    setFormCoordsStr(`${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)
+    setFormLat(p.lat)
+    setFormLon(p.lon)
+    setFormTipo(p.tipo)
+    setFormErro(null)
+    setModalOpen(true)
+  }
+
+  const handleUsarLocalizacaoAtual = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: 'Não suportado',
+        description: 'Seu navegador não suporta geolocalização.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setGeoLoading(true)
+    setFormErro(null)
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setFormLat(lat)
+        setFormLon(lon)
+        setFormCoordsStr(`${lat.toFixed(4)}, ${lon.toFixed(4)}`)
+        setGeoLoading(false)
+        toast({
+          title: 'Localização obtida!',
+          description: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+        })
+      },
+      (err) => {
+        setGeoLoading(false)
+        console.warn('Erro ao obter geolocalização:', err)
+        toast({
+          title: 'Localização indisponível',
+          description: 'Não foi possível obter sua posição. Digite as coordenadas manualmente.',
+          variant: 'destructive',
+        })
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
+
+  const handleSalvarPonto = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormErro(null)
+
+    const nomeTrimmed = formNome.trim()
+    if (!nomeTrimmed) {
+      setFormErro('O nome do ponto é obrigatório.')
+      return
+    }
+
+    // Parse de coordenadas se digitado
+    let lat = formLat
+    let lon = formLon
+
+    if (formCoordsStr.trim()) {
+      const parsed = parseCoordinatesInput(formCoordsStr)
+      if (parsed) {
+        lat = parsed.lat
+        lon = parsed.lon
+      } else if (lat === null || lon === null) {
+        setFormErro(
+          "Formato de coordenadas inválido. Use decimal (-23.1234, -44.1234) ou DMM (23°07.40'S 044°19.08'W).",
+        )
+        return
+      }
+    }
+
+    if (lat === null || lon === null) {
+      setFormErro('Por favor, informe a localização do ponto.')
+      return
+    }
+
+    setSavingPonto(true)
+
+    // Validação na API do backend: testar se a posição está no mar ou em terra
+    try {
+      await fetchPrevisaoPorPonto('', {
+        lat,
+        lon,
+        tipo: formTipo,
+        nome: nomeTrimmed,
+      })
+    } catch (apiErr: any) {
+      setSavingPonto(false)
+      const msg = apiErr?.message || ''
+      if (msg.includes('terra') || msg.includes('ajuste para o mar')) {
+        toast({
+          title: 'Coordenada em terra',
+          description: 'esta posição parece estar em terra — ajuste para o mar',
+          variant: 'destructive',
+          duration: 4500,
+        })
+        setFormErro('esta posição parece estar em terra — ajuste para o mar')
+        return
+      }
+      // Se for outro erro temporário (ex: 502 de rede do open meteo), exibe aviso mas não bloqueia se for erro transitório
+      console.warn('Erro ao validar ponto na API:', apiErr)
+    }
+
+    if (editingPonto) {
+      const res = updatePontoPersonalizado(editingPonto.id, {
+        nome: nomeTrimmed,
+        lat,
+        lon,
+        tipo: formTipo,
+      })
+      if (!res.success) {
+        setSavingPonto(false)
+        setFormErro(res.error || 'Erro ao atualizar ponto.')
+        return
+      }
+      toast({
+        title: 'Ponto atualizado!',
+        description: `O ponto "${nomeTrimmed}" foi alterado com sucesso.`,
+      })
+    } else {
+      const res = addPontoPersonalizado({
+        nome: nomeTrimmed,
+        lat,
+        lon,
+        tipo: formTipo,
+      })
+      if (!res.success) {
+        setSavingPonto(false)
+        setFormErro(res.error || 'Erro ao salvar ponto.')
+        return
+      }
+      toast({
+        title: 'Ponto adicionado!',
+        description: `O ponto "${nomeTrimmed}" foi salvo em Meus pontos.`,
+      })
+    }
+
+    setSavingPonto(false)
+    setModalOpen(false)
+    reloadPontos()
+  }
+
+  const handleDeletePonto = (id: string) => {
+    const success = deletePontoPersonalizado(id)
+    if (success) {
+      toast({
+        title: 'Ponto excluído',
+        description: 'Ponto personalizado removido com sucesso.',
+      })
+      reloadPontos()
+    }
+    setConfirmDeleteId(null)
+  }
 
   const handleExportarPreferencias = () => {
     try {
@@ -82,7 +319,6 @@ export const ConfigPage: React.FC = () => {
         const text = event.target?.result as string
         const parsed = JSON.parse(text)
 
-        // Validação básica dos campos esperados
         if (!parsed || typeof parsed !== 'object') {
           throw new Error('Formato de arquivo inválido')
         }
@@ -104,11 +340,14 @@ export const ConfigPage: React.FC = () => {
                   timestamp: String(parsed.ultimo_briefing.timestamp || new Date().toISOString()),
                 }
               : null,
+          pontos_personalizados: Array.isArray(parsed.pontos_personalizados)
+            ? parsed.pontos_personalizados
+            : [],
         }
 
-        // Sobrescreve no localStorage
         localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(validPrefs))
         setStoredPreferences(validPrefs)
+        reloadPontos()
 
         if (reload) {
           await reload()
@@ -116,7 +355,7 @@ export const ConfigPage: React.FC = () => {
 
         toast({
           title: 'Preferências importadas!',
-          description: 'Suas preferências foram restauradas com sucesso.',
+          description: 'Suas preferências e pontos foram restaurados com sucesso.',
           duration: 3000,
         })
       } catch (err: any) {
@@ -129,7 +368,6 @@ export const ConfigPage: React.FC = () => {
           duration: 4000,
         })
       } finally {
-        // Reseta o input para permitir selecionar o mesmo arquivo novamente se necessário
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }
@@ -158,6 +396,19 @@ export const ConfigPage: React.FC = () => {
     return <Ship className="w-4 h-4" />
   }
 
+  const getTipoBadgeClass = (tipo: string) => {
+    if (tipo === 'abrigado') return 'bg-blue-950/70 text-blue-300 border-blue-800/60'
+    if (tipo === 'semi' || tipo === 'semi-abrigado')
+      return 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60'
+    return 'bg-slate-800 text-slate-300 border-slate-700'
+  }
+
+  const formatTipoLabel = (tipo: string) => {
+    if (tipo === 'abrigado') return 'Abrigado'
+    if (tipo === 'semi' || tipo === 'semi-abrigado') return 'Semi-abrigado'
+    return 'Mar aberto'
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6">
       <div className="w-full max-w-3xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
@@ -183,7 +434,7 @@ export const ConfigPage: React.FC = () => {
                 </h1>
               </div>
               <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                Preferências da embarcação e limites de navegabilidade
+                Preferências da embarcação, ancoradouros e limites de navegabilidade
               </p>
             </div>
           </div>
@@ -251,10 +502,106 @@ export const ConfigPage: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* SEÇÃO: MEUS PONTOS PERSONALIZADOS */}
+              <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
+                <CardHeader className="pb-3 border-b border-zinc-800/80 flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <CardTitle className="text-base font-bold text-white">
+                        Meus Pontos Personalizados
+                      </CardTitle>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Cadastre até {MAX_PONTOS_PERSONALIZADOS} locais, ilhas ou ancoradouros
+                        favoritos ({pontosCustom.length}/{MAX_PONTOS_PERSONALIZADOS})
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleOpenAddModal}
+                    disabled={pontosCustom.length >= MAX_PONTOS_PERSONALIZADOS}
+                    className="bg-cyan-900 hover:bg-cyan-800 text-cyan-100 border border-cyan-600/50 text-xs gap-1.5 font-medium shrink-0 disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {pontosCustom.length >= MAX_PONTOS_PERSONALIZADOS
+                      ? 'Máximo de 10 pontos atingido'
+                      : 'Adicionar ponto'}
+                  </Button>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-5 space-y-3">
+                  {pontosCustom.length === 0 ? (
+                    <div className="p-6 text-center rounded-xl bg-[#161c24] border border-dashed border-zinc-800 space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-cyan-950/60 border border-cyan-800/50 flex items-center justify-center text-cyan-400 mx-auto">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-semibold text-zinc-200">
+                        Nenhum ponto personalizado cadastrado
+                      </p>
+                      <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                        Adicione praias, poitas ou enseadas na Baía de Ilha Grande para acompanhar a
+                        previsão, ondas e janelas ideais dedicadas.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {pontosCustom.map((p) => (
+                        <div
+                          key={p.id}
+                          className="p-3 rounded-xl bg-[#161c24] border border-zinc-800 flex items-center justify-between gap-3 hover:border-zinc-700 transition-colors"
+                        >
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-white truncate flex items-center gap-1.5">
+                                <span className="text-amber-400">⭐</span>
+                                {p.nome}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] px-2 py-0 border ${getTipoBadgeClass(
+                                  p.tipo,
+                                )}`}
+                              >
+                                {formatTipoLabel(p.tipo)}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-zinc-400 font-mono flex items-center gap-1">
+                              <Compass className="w-3 h-3 text-zinc-500 shrink-0" />
+                              <span>{formatCoordinatesDMM(p.lat, p.lon)}</span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenEditModal(p)}
+                              className="h-8 w-8 p-0 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-950/40"
+                              title="Editar ponto"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmDeleteId(p.id)}
+                              className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400 hover:bg-red-950/40"
+                              title="Excluir ponto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
 
-          {/* Limites do Perfil Atual (Somente Leitura / Sliders desabilitados) */}
+          {/* Limites do Perfil Atual (Somente Leitura) */}
           <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
             <CardHeader className="pb-3 border-b border-zinc-800/80 flex flex-row items-center justify-between">
               <CardTitle className="text-base font-bold text-white flex items-center gap-2">
@@ -269,8 +616,8 @@ export const ConfigPage: React.FC = () => {
               <div className="p-3 rounded-lg bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex items-start gap-2">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
-                  Estes limites determinam a penalização de score e janelas ideais. Futuramente será
-                  possível calibrar valores customizados por perfil.
+                  Estes limites determinam a penalização de score e janelas ideais para pontos fixos
+                  e personalizados.
                 </span>
               </div>
 
@@ -381,13 +728,13 @@ export const ConfigPage: React.FC = () => {
             <CardHeader className="pb-3 border-b border-zinc-800/80">
               <CardTitle className="text-base font-bold text-white flex items-center gap-2">
                 <Download className="w-4 h-4 text-cyan-400" />
-                Backup de Preferências
+                Backup de Preferências & Meus Pontos
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-4">
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Exporte suas configurações locais para um arquivo JSON ou importe dados salvos de
-                outro navegador/dispositivo:
+                Exporte suas configurações locais e seus pontos personalizados para um arquivo JSON
+                ou importe dados salvos de outro navegador/dispositivo:
               </p>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <Button
@@ -444,6 +791,195 @@ export const ConfigPage: React.FC = () => {
           </Card>
         </main>
       </div>
+
+      {/* MODAL ADICIONAR / EDITAR PONTO */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-lg bg-[#0d131b] border-cyan-900/60 text-zinc-100 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-cyan-400" />
+              {editingPonto ? 'Editar ponto personalizado' : 'Adicionar ponto personalizado'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              Insira a posição geográfica e o grau de proteção contra vento e ondulação.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSalvarPonto} className="space-y-4 pt-1">
+            {/* Nome */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ponto-nome" className="text-xs font-medium text-zinc-300">
+                Nome do ponto <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                id="ponto-nome"
+                placeholder="Ex: Praia do Dentista, Enseada de Sítio Forte..."
+                value={formNome}
+                onChange={(e) => {
+                  setFormNome(e.target.value)
+                  if (formErro) setFormErro(null)
+                }}
+                disabled={savingPonto}
+                className="bg-[#070b10] border-zinc-700/80 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9"
+                autoFocus
+              />
+            </div>
+
+            {/* Localização: Opção (a) Geolocalização e Opção (b) Entrada manual */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ponto-coords" className="text-xs font-medium text-zinc-300">
+                  Localização / Coordenadas <span className="text-red-400">*</span>
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUsarLocalizacaoAtual}
+                  disabled={geoLoading || savingPonto}
+                  className="bg-[#161c24] border-cyan-800 text-cyan-300 hover:bg-cyan-950/60 text-[11px] h-7 px-2.5 gap-1.5"
+                >
+                  {geoLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Navigation className="w-3 h-3" />
+                  )}
+                  Usar localização atual
+                </Button>
+              </div>
+
+              <Input
+                id="ponto-coords"
+                placeholder="Decimal (-23.1234, -44.1234) ou DMM (23°07.40'S 044°19.08'W)"
+                value={formCoordsStr}
+                onChange={(e) => {
+                  setFormCoordsStr(e.target.value)
+                  if (formErro) setFormErro(null)
+                }}
+                disabled={savingPonto}
+                className="bg-[#070b10] border-zinc-700/80 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9 font-mono"
+              />
+              <p className="text-[10px] text-zinc-500">
+                Aceita formato decimal simples ou graus e minutos náuticos com hemisfério.
+              </p>
+            </div>
+
+            {/* Tipo de Ancoradouro */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-zinc-300">
+                Tipo de ancoradouro <span className="text-red-400">*</span>
+              </Label>
+              <Select
+                value={formTipo}
+                onValueChange={(val) => setFormTipo(val as TipoPontoPersonalizado)}
+                disabled={savingPonto}
+              >
+                <SelectTrigger className="bg-[#070b10] border-zinc-700/80 text-zinc-100 text-xs h-9">
+                  <SelectValue placeholder="Selecione a proteção" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0d131b] border-zinc-700 text-zinc-100 text-xs">
+                  <SelectItem value="abrigado">Abrigado</SelectItem>
+                  <SelectItem value="semi-abrigado">Semi-abrigado</SelectItem>
+                  <SelectItem value="mar aberto">Mar aberto</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Explicação contextual da opção selecionada */}
+              <div className="p-2.5 rounded-lg bg-[#070b10] border border-zinc-800 text-[11px] text-zinc-400 leading-relaxed">
+                {formTipo === 'abrigado' && (
+                  <p className="text-blue-300">
+                    <span className="font-semibold text-white">Abrigado:</span> Protegido de vento e
+                    ondulação por terra ou ilhas em todas as direções (sem dedução no score).
+                  </p>
+                )}
+                {formTipo === 'semi-abrigado' && (
+                  <p className="text-indigo-300">
+                    <span className="font-semibold text-white">Semi-abrigado:</span> Parcialmente
+                    protegido; pode receber ondulação de uma ou mais direções (-10 pts no score).
+                  </p>
+                )}
+                {formTipo === 'mar aberto' && (
+                  <p className="text-amber-300">
+                    <span className="font-semibold text-white">Mar aberto:</span> Totalmente exposto
+                    a vento e ondulação vindos de alto-mar (-20 pts no score).
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Mensagem de Erro do Formulário */}
+            {formErro && (
+              <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{formErro}</span>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalOpen(false)}
+                disabled={savingPonto}
+                className="bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={savingPonto}
+                className="bg-cyan-800 hover:bg-cyan-700 text-white border border-cyan-600/50 text-xs gap-1.5 font-medium shadow-md"
+              >
+                {savingPonto ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Validando posição...
+                  </>
+                ) : (
+                  'Salvar ponto'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      <Dialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <DialogContent className="sm:max-w-md bg-[#0d131b] border-red-900/60 text-zinc-100">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-red-400" />
+              Excluir ponto personalizado
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              Tem certeza que deseja remover este ponto de navegação? Os dados salvos localmente
+              serão excluídos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDeleteId(null)}
+              className="bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => confirmDeleteId && handleDeletePonto(confirmDeleteId)}
+              className="bg-red-800 hover:bg-red-700 text-white border border-red-600/50 text-xs gap-1.5"
+            >
+              Sim, excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Rodapé Oficial */}
       <footer className="w-full border-t border-zinc-800/80 bg-[#070a0f] py-4 px-4 text-center mt-6">

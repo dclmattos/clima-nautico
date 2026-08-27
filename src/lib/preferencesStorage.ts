@@ -1,13 +1,47 @@
 import pb from '@/lib/pocketbase/client'
-import { PreferenciasStorage } from '@/types/nautico'
+import { PreferenciasStorage, PontoPersonalizado } from '@/types/nautico'
 
 export const PREFS_STORAGE_KEY = 'clima_nautico_prefs_v1'
+export const MAX_PONTOS_PERSONALIZADOS = 10
 
 export const DEFAULT_PREFERENCIAS: PreferenciasStorage = {
   perfil_id: 'lancha',
   ponto_favorito_slug: 'angra',
   horario_briefing: '07:00',
   ultimo_briefing: null,
+  pontos_personalizados: [],
+}
+
+/**
+ * Normaliza array de pontos personalizados
+ */
+function sanitizePontosPersonalizados(raw: any): PontoPersonalizado[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const tipo =
+        item.tipo === 'semi-abrigado' || item.tipo === 'semi'
+          ? 'semi-abrigado'
+          : item.tipo === 'mar aberto' || item.tipo === 'aberto'
+            ? 'mar aberto'
+            : 'abrigado'
+
+      return {
+        id: String(
+          item.id ||
+            (typeof crypto !== 'undefined' && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `ponto-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
+        ),
+        nome: String(item.nome || 'Ponto Personalizado'),
+        lat: Number(item.lat) || 0,
+        lon: Number(item.lon) || 0,
+        tipo: tipo as PontoPersonalizado['tipo'],
+        criado_em: String(item.criado_em || new Date().toISOString()),
+      }
+    })
+    .slice(0, MAX_PONTOS_PERSONALIZADOS)
 }
 
 /**
@@ -42,6 +76,7 @@ export function getStoredPreferences(): PreferenciasStorage | null {
             : typeof parsed.ultimo_briefing === 'string'
               ? { texto: parsed.ultimo_briefing, timestamp: new Date().toISOString() }
               : null,
+        pontos_personalizados: sanitizePontosPersonalizados(parsed.pontos_personalizados),
       }
     }
     return null
@@ -61,6 +96,10 @@ export function setStoredPreferences(prefs: Partial<PreferenciasStorage>): Prefe
     ...prefs,
     ultimo_briefing:
       prefs.ultimo_briefing !== undefined ? prefs.ultimo_briefing : current.ultimo_briefing,
+    pontos_personalizados:
+      prefs.pontos_personalizados !== undefined
+        ? sanitizePontosPersonalizados(prefs.pontos_personalizados)
+        : current.pontos_personalizados || [],
   }
 
   if (typeof window !== 'undefined') {
@@ -75,12 +114,78 @@ export function setStoredPreferences(prefs: Partial<PreferenciasStorage>): Prefe
 }
 
 /**
- * Inicialização com migração automática:
- * Se 'clima_nautico_prefs_v1' não existir no localStorage, tenta buscar uma vez o registro antigo
- * na collection 'preferencias' (se ainda acessível/migrável) pelo deviceId.
- * Se encontrar, migra os dados e salva na chave v1.
- * Se não encontrar ou falhar, grava os defaults.
- * NUNCA mais chama a collection 'preferencias' após essa chave existir.
+ * Funções CRUD para Pontos Personalizados
+ */
+
+export function getPontosPersonalizados(): PontoPersonalizado[] {
+  const prefs = getStoredPreferences()
+  return prefs?.pontos_personalizados || []
+}
+
+export function addPontoPersonalizado(
+  ponto: Omit<PontoPersonalizado, 'id' | 'criado_em'> & { id?: string; criado_em?: string },
+): { success: boolean; ponto?: PontoPersonalizado; error?: string } {
+  const currentPontos = getPontosPersonalizados()
+  if (currentPontos.length >= MAX_PONTOS_PERSONALIZADOS) {
+    return { success: false, error: `Máximo de ${MAX_PONTOS_PERSONALIZADOS} pontos atingido` }
+  }
+
+  const newId =
+    ponto.id ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `custom-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`)
+
+  const novoPonto: PontoPersonalizado = {
+    id: newId,
+    nome: ponto.nome.trim(),
+    lat: Number(ponto.lat),
+    lon: Number(ponto.lon),
+    tipo: ponto.tipo,
+    criado_em: ponto.criado_em || new Date().toISOString(),
+  }
+
+  const updatedList = [...currentPontos, novoPonto]
+  setStoredPreferences({ pontos_personalizados: updatedList })
+  return { success: true, ponto: novoPonto }
+}
+
+export function updatePontoPersonalizado(
+  id: string,
+  dados: Partial<Omit<PontoPersonalizado, 'id' | 'criado_em'>>,
+): { success: boolean; ponto?: PontoPersonalizado; error?: string } {
+  const currentPontos = getPontosPersonalizados()
+  const index = currentPontos.findIndex((p) => p.id === id)
+  if (index === -1) {
+    return { success: false, error: 'Ponto não encontrado' }
+  }
+
+  const updated: PontoPersonalizado = {
+    ...currentPontos[index],
+    ...(dados.nome !== undefined ? { nome: dados.nome.trim() } : {}),
+    ...(dados.lat !== undefined ? { lat: Number(dados.lat) } : {}),
+    ...(dados.lon !== undefined ? { lon: Number(dados.lon) } : {}),
+    ...(dados.tipo !== undefined ? { tipo: dados.tipo } : {}),
+  }
+
+  const updatedList = [...currentPontos]
+  updatedList[index] = updated
+  setStoredPreferences({ pontos_personalizados: updatedList })
+  return { success: true, ponto: updated }
+}
+
+export function deletePontoPersonalizado(id: string): boolean {
+  const currentPontos = getPontosPersonalizados()
+  const filtered = currentPontos.filter((p) => p.id !== id)
+  if (filtered.length === currentPontos.length) {
+    return false
+  }
+  setStoredPreferences({ pontos_personalizados: filtered })
+  return true
+}
+
+/**
+ * Inicialização com migração automática
  */
 export async function inicializarPreferencias(deviceId: string): Promise<PreferenciasStorage> {
   const existing = getStoredPreferences()
@@ -110,6 +215,7 @@ export async function inicializarPreferencias(deviceId: string): Promise<Prefere
               timestamp: record.updated || record.created || new Date().toISOString(),
             }
           : null,
+        pontos_personalizados: [],
       }
       setStoredPreferences(migrated)
       return migrated

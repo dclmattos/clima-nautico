@@ -57,8 +57,13 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
     currentScore,
     proximaJanela,
     loadingJanelas,
+    isPersonalizado,
   } = estado
-  const nomeExibicao = formatPontoNome(ponto.nome)
+  const isCustom =
+    isPersonalizado ||
+    (ponto as any).isPersonalizado ||
+    (ponto.id && ponto.id.startsWith('custom-'))
+  const nomeExibicao = isCustom ? ponto.nome : formatPontoNome(ponto.nome)
   const tipoFormatado = formatTipoPonto(ponto.tipo)
 
   // Badge visual por tipo de ancoradouro/ponto
@@ -368,6 +373,11 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <CardTitle className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2 group-hover:text-cyan-300 transition-colors">
+                {isCustom && (
+                  <span title="Ponto personalizado" className="text-amber-400 text-sm">
+                    ⭐
+                  </span>
+                )}
                 {nomeExibicao}
                 <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
               </CardTitle>
