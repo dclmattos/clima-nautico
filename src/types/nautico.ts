@@ -59,9 +59,15 @@ export interface PreferenciasUsuario {
   perfil_id?: string
   ponto_favorito_id?: string
   horario_briefing?: string
+  ultimo_briefing?: string
   criado_em?: string
   created?: string
   updated?: string
+}
+
+export interface BriefingResponse {
+  texto: string
+  gerado_em: string
 }
 
 export interface HourlyScore {

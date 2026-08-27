@@ -4,7 +4,11 @@ import { PrevisaoPayload } from '@/types/nautico'
 import { fetchPrevisaoPorPonto, PONTOS_DISPONIVEIS } from '@/services/previsaoService'
 import { PontoDetalhe } from '@/components/PontoDetalhe'
 import { Button } from '@/components/ui/button'
-import { Anchor, AlertTriangle, ArrowLeft, RotateCw } from 'lucide-react'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { PullToRefresh } from '@/components/ui/PullToRefresh'
+import { Anchor, AlertTriangle, ArrowLeft, RotateCw, Compass } from 'lucide-react'
 
 export const PontoDetalhePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -53,29 +57,25 @@ export const PontoDetalhePage: React.FC = () => {
   // Se for slug inválido
   if (!isValidSlug && !loading) {
     return (
-      <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between">
-        <div className="w-full max-w-5xl mx-auto px-4 py-8 flex-1 flex flex-col items-center justify-center text-center">
-          <div className="w-12 h-12 rounded-full bg-amber-950/50 border border-amber-800/60 flex items-center justify-center text-amber-400 mb-4">
-            <AlertTriangle className="w-6 h-6" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Ponto não encontrado</h2>
-          <p className="text-zinc-400 text-sm max-w-md mb-6">
-            O ponto de navegação especificado &ldquo;{slug}&rdquo; não existe ou não está mapeado.
-          </p>
-          <Button
-            onClick={() => navigate('/')}
-            className="bg-cyan-900 hover:bg-cyan-800 text-cyan-100 gap-2 text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar para a página inicial
-          </Button>
+      <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between p-4">
+        <div className="w-full max-w-md mx-auto my-auto">
+          <EmptyState
+            icon={<Compass className="w-6 h-6 text-amber-400" />}
+            title="Ponto não encontrado"
+            description={`O ponto de navegação "${slug}" não existe ou não está mapeado.`}
+            actionLabel="Voltar para a página inicial"
+            onAction={() => navigate('/')}
+          />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100">
+    <PullToRefresh
+      onRefresh={() => carregarDadosPonto(activeSlug, true)}
+      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100"
+    >
       <div className="w-full max-w-5xl mx-auto px-4 py-5 sm:py-8 flex-1 flex flex-col">
         {/* Header Superior Global */}
         <header className="mb-6 flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
@@ -99,60 +99,20 @@ export const PontoDetalhePage: React.FC = () => {
         </header>
 
         {/* Estado: Carregando (Skeleton) */}
-        {loading && (
-          <div className="space-y-6 animate-pulse">
-            {/* Top Bar Skeleton */}
-            <div className="h-28 bg-[#11161d] border border-zinc-800 rounded-xl p-5 space-y-3">
-              <div className="h-4 bg-zinc-800 rounded w-24"></div>
-              <div className="h-7 bg-zinc-800 rounded w-1/3"></div>
-            </div>
-
-            {/* Grafico 1 Skeleton */}
-            <div className="h-[340px] bg-[#11161d] border border-zinc-800 rounded-xl p-5 space-y-4">
-              <div className="h-5 bg-zinc-800 rounded w-1/4"></div>
-              <div className="h-56 bg-zinc-800/40 rounded-lg"></div>
-            </div>
-
-            {/* Grafico 2 Skeleton */}
-            <div className="h-[240px] bg-[#11161d] border border-zinc-800 rounded-xl p-5 space-y-4">
-              <div className="h-5 bg-zinc-800 rounded w-1/4"></div>
-              <div className="h-36 bg-zinc-800/40 rounded-lg"></div>
-            </div>
-
-            {/* Tabela Skeleton */}
-            <div className="h-[250px] bg-[#11161d] border border-zinc-800 rounded-xl p-5 space-y-4">
-              <div className="h-5 bg-zinc-800 rounded w-1/4"></div>
-              <div className="h-40 bg-zinc-800/40 rounded-lg"></div>
-            </div>
-          </div>
-        )}
+        {loading && <LoadingState variant="detail" />}
 
         {/* Estado: Erro */}
         {!loading && error && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#11161d] border border-red-950/60 rounded-xl shadow-lg my-auto">
-            <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-800/60 flex items-center justify-center text-red-400 mb-4">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">Erro ao carregar dados</h2>
-            <p className="text-zinc-400 text-sm max-w-md mb-6">{error}</p>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/')}
-                className="bg-zinc-800 border-zinc-700 text-zinc-200"
-              >
-                Voltar aos pontos
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => carregarDadosPonto(activeSlug)}
-                className="bg-cyan-900 hover:bg-cyan-800 text-cyan-100 gap-1.5"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                Tentar de novo
-              </Button>
-            </div>
+          <div className="my-auto">
+            <ErrorState
+              title="Erro ao carregar dados"
+              message={error}
+              onRetry={() => carregarDadosPonto(activeSlug)}
+              secondaryAction={{
+                label: 'Voltar aos pontos',
+                onClick: () => navigate('/'),
+              }}
+            />
           </div>
         )}
 
@@ -160,20 +120,14 @@ export const PontoDetalhePage: React.FC = () => {
         {!loading &&
           !error &&
           (!previsaoData || !previsaoData.hourly || previsaoData.hourly.length === 0) && (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#11161d] border border-zinc-800 rounded-xl my-auto">
-              <p className="text-zinc-300 font-semibold mb-2">Nenhuma previsão encontrada</p>
-              <p className="text-zinc-400 text-sm mb-4">
-                Não há dados horários disponíveis para este ponto no momento.
-              </p>
-              <Button
-                onClick={() => carregarDadosPonto(activeSlug)}
-                variant="outline"
-                size="sm"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 gap-1.5"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                Tentar de novo
-              </Button>
+            <div className="my-auto">
+              <EmptyState
+                icon={<Compass className="w-6 h-6 text-zinc-400" />}
+                title="Nenhuma previsão encontrada"
+                description="Não há dados horários disponíveis para este ponto no momento."
+                actionLabel="Tentar de novo"
+                onAction={() => carregarDadosPonto(activeSlug)}
+              />
             </div>
           )}
 
@@ -194,7 +148,7 @@ export const PontoDetalhePage: React.FC = () => {
           Dados: Open-Meteo · maré modelada, não substitui a Tábua da DHN
         </p>
       </footer>
-    </div>
+    </PullToRefresh>
   )
 }
 

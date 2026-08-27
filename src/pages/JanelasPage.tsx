@@ -13,6 +13,10 @@ import { usePerfil } from '@/contexts/PerfilContext'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import {
   Anchor,
   Compass,
@@ -204,7 +208,10 @@ export const JanelasPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6">
+    <PullToRefresh
+      onRefresh={handleRefreshAll}
+      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6"
+    >
       <div className="w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
         {/* Header da Página */}
         <header className="mb-6 space-y-4 border-b border-zinc-800/80 pb-4">
@@ -326,44 +333,23 @@ export const JanelasPage: React.FC = () => {
 
                 <CardContent className="p-4 sm:p-5">
                   {/* Skeleton Loading */}
-                  {estado.loading && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-pulse">
-                      <div className="h-24 bg-zinc-800/50 rounded-lg p-3"></div>
-                      <div className="h-24 bg-zinc-800/50 rounded-lg p-3"></div>
-                    </div>
-                  )}
+                  {estado.loading && <LoadingState variant="cards" count={2} />}
 
                   {/* Erro */}
                   {!estado.loading && estado.error && (
-                    <div className="p-4 rounded-lg bg-red-950/30 border border-red-900/50 text-red-300 text-xs flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                        <span>{estado.error}</span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => carregarJanelasPonto(ponto, perfil?.id || 'lancha')}
-                        className="bg-red-900/40 border-red-800 text-xs gap-1"
-                      >
-                        <RotateCw className="w-3 h-3" />
-                        Tentar de novo
-                      </Button>
-                    </div>
+                    <ErrorState
+                      message={estado.error}
+                      onRetry={() => carregarJanelasPonto(ponto, perfil?.id || 'lancha')}
+                    />
                   )}
 
                   {/* Sem Janelas */}
                   {!estado.loading && !estado.error && janelas.length === 0 && (
-                    <div className="py-6 px-4 rounded-lg bg-[#0a0e14] border border-dashed border-zinc-800 text-center flex flex-col items-center justify-center">
-                      <ShieldAlert className="w-6 h-6 text-zinc-500 mb-2" />
-                      <p className="text-sm font-semibold text-zinc-400">
-                        Sem janelas ideais nos próximos 3 dias
-                      </p>
-                      <p className="text-xs text-zinc-500 mt-1 max-w-sm">
-                        As condições meteorológicas ficam abaixo do limiar de segurança (score &lt;
-                        70) para o perfil {perfil?.nome}.
-                      </p>
-                    </div>
+                    <EmptyState
+                      icon={<ShieldAlert className="w-6 h-6 text-zinc-500" />}
+                      title="Sem janelas ideais nos próximos 3 dias"
+                      description={`As condições meteorológicas ficam abaixo do limiar de segurança (score < 70) para o perfil ${perfil?.nome}.`}
+                    />
                   )}
 
                   {/* Lista de Janelas Ideais */}
@@ -434,7 +420,7 @@ export const JanelasPage: React.FC = () => {
           Dados: Open-Meteo · maré modelada, não substitui a Tábua da DHN
         </p>
       </footer>
-    </div>
+    </PullToRefresh>
   )
 }
 

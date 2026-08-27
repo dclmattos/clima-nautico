@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#0a0e14"/>
+  <g transform="translate(32, 32) scale(0.14)" stroke="#06b6d4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="0" cy="-120" r="28" stroke-width="18" fill="#082f49"/>
+    <line x1="-75" y1="-55" x2="75" y2="-55" stroke-width="18"/>
+    <circle cx="-75" cy="-55" r="8" fill="#22d3ee" stroke="none"/>
+    <circle cx="75" cy="-55" r="8" fill="#22d3ee" stroke="none"/>
+    <line x1="0" y1="-92" x2="0" y2="105" stroke-width="20" stroke="#38bdf8"/>
+    <path d="M -115 10 C -115 125 115 125 115 10" stroke-width="22" stroke="#06b6d4"/>
+    <polygon points="-115,10 -138,4 -115,40" fill="#22d3ee" stroke="none"/>
+    <polygon points="115,10 138,4 115,40" fill="#22d3ee" stroke="none"/>
+    <circle cx="0" cy="0" r="14" fill="#22d3ee" stroke="#0a0e14" stroke-width="4"/>
+  </g>
+</svg>

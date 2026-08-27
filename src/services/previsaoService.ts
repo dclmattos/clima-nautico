@@ -152,6 +152,34 @@ export async function fetchJanelas(pontoId: string, perfilId: string): Promise<J
   return data
 }
 
+export async function fetchBriefingComandante(
+  perfilId: string,
+  dispositivoUuid?: string,
+): Promise<{ texto: string; gerado_em: string }> {
+  const backendUrl = pb.baseUrl || ''
+  let url = `${backendUrl}/backend/v1/briefing?perfil_id=${encodeURIComponent(perfilId)}`
+  if (dispositivoUuid) {
+    url += `&dispositivo_uuid=${encodeURIComponent(dispositivoUuid)}`
+  }
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    let errorDetail = 'Não foi possível gerar o briefing'
+    try {
+      const errJson = await res.json()
+      if (errJson?.error) {
+        errorDetail = errJson.error
+      }
+    } catch {
+      errorDetail = `Erro no servidor (${res.status})`
+    }
+    throw new Error(errorDetail)
+  }
+
+  const data: { texto: string; gerado_em: string } = await res.json()
+  return data
+}
+
 /**
  * Encontra a próxima janela disponível (no futuro ou em andamento)
  */

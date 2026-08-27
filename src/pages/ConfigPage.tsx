@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
+import { LoadingState } from '@/components/ui/LoadingState'
 import {
   Settings,
   ArrowLeft,
@@ -24,7 +25,7 @@ import {
 
 export const ConfigPage: React.FC = () => {
   const navigate = useNavigate()
-  const { perfil, perfis, setPerfil, deviceId } = usePerfil()
+  const { perfil, perfis, setPerfil, deviceId, loading } = usePerfil()
 
   const getPerfilIcon = (nome: string) => {
     const n = nome.toLowerCase()
@@ -65,63 +66,69 @@ export const ConfigPage: React.FC = () => {
         </header>
 
         <main className="space-y-6 flex-1">
-          {/* Card de Seleção de Perfil */}
-          <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
-            <CardHeader className="pb-3 border-b border-zinc-800/80">
-              <CardTitle className="text-base font-bold text-white flex items-center gap-2">
-                <Ship className="w-4 h-4 text-cyan-400" />
-                Perfil Ativo de Navegação
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-4">
-              <p className="text-xs sm:text-sm text-zinc-400">
-                Selecione o tipo de embarcação para calcular o score e as janelas ideais:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {perfis.map((p) => {
-                  const isSelected =
-                    perfil?.id === p.id || perfil?.nome?.toLowerCase() === p.nome?.toLowerCase()
-                  const label = p.nome.charAt(0).toUpperCase() + p.nome.slice(1)
+          {loading && <LoadingState variant="cards" count={2} />}
 
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => setPerfil(p.id)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2 ${
-                        isSelected
-                          ? 'bg-cyan-950/60 border-cyan-600 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
-                          : 'bg-[#161c24] border-zinc-800 hover:border-zinc-700 hover:bg-[#1c242e]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`p-2 rounded-lg ${
-                              isSelected
-                                ? 'bg-cyan-900/60 text-cyan-300'
-                                : 'bg-zinc-800 text-zinc-400'
-                            }`}
-                          >
-                            {getPerfilIcon(p.nome)}
+          {!loading && (
+            <>
+              {/* Card de Seleção de Perfil */}
+              <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">
+                <CardHeader className="pb-3 border-b border-zinc-800/80">
+                  <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                    <Ship className="w-4 h-4 text-cyan-400" />
+                    Perfil Ativo de Navegação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-5 space-y-4">
+                  <p className="text-xs sm:text-sm text-zinc-400">
+                    Selecione o tipo de embarcação para calcular o score e as janelas ideais:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {perfis.map((p) => {
+                      const isSelected =
+                        perfil?.id === p.id || perfil?.nome?.toLowerCase() === p.nome?.toLowerCase()
+                      const label = p.nome.charAt(0).toUpperCase() + p.nome.slice(1)
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setPerfil(p.id)}
+                          className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-cyan-950/60 border-cyan-600 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                              : 'bg-[#161c24] border-zinc-800 hover:border-zinc-700 hover:bg-[#1c242e]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`p-2 rounded-lg ${
+                                  isSelected
+                                    ? 'bg-cyan-900/60 text-cyan-300'
+                                    : 'bg-zinc-800 text-zinc-400'
+                                }`}
+                              >
+                                {getPerfilIcon(p.nome)}
+                              </div>
+                              <span className="font-bold text-sm text-white">{label}</span>
+                            </div>
+                            {isSelected && (
+                              <Badge className="bg-cyan-600 hover:bg-cyan-600 text-white text-[10px] uppercase">
+                                Ativo
+                              </Badge>
+                            )}
                           </div>
-                          <span className="font-bold text-sm text-white">{label}</span>
+                          <div className="text-[11px] text-zinc-400 space-y-0.5">
+                            <p>Vento máx: {p.vento_max_kt} kt</p>
+                            <p>Onda máx: {p.onda_max_m} m</p>
+                          </div>
                         </div>
-                        {isSelected && (
-                          <Badge className="bg-cyan-600 hover:bg-cyan-600 text-white text-[10px] uppercase">
-                            Ativo
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-zinc-400 space-y-0.5">
-                        <p>Vento máx: {p.vento_max_kt} kt</p>
-                        <p>Onda máx: {p.onda_max_m} m</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Limites do Perfil Atual (Somente Leitura / Sliders desabilitados) */}
           <Card className="bg-[#11161d] border-zinc-800 shadow-md text-zinc-100">

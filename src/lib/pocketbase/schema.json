@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T00:07:36.501Z",
+  "generatedAt": "2026-08-27T00:11:23.755Z",
   "collections": [
     {
       "name": "users",
@@ -220,6 +220,12 @@
         },
         {
           "name": "dispositivo_uuid",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultimo_briefing",
           "type": "text",
           "required": false,
           "system": false

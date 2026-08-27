@@ -9,12 +9,16 @@ import {
   getProximaJanela,
 } from '@/services/previsaoService'
 import { PontoCard } from '@/components/PontoCard'
+import { BriefingCard } from '@/components/BriefingCard'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import { usePerfil } from '@/contexts/PerfilContext'
 import { RotateCw, Anchor, Compass, Ship, Sailboat, Zap } from 'lucide-react'
 
 const Index: React.FC = () => {
-  const { perfil, perfis, setPerfil, loading: loadingPerfil } = usePerfil()
+  const { perfil, perfis, setPerfil, deviceId, preferencias } = usePerfil()
   const [pontosEstados, setPontosEstados] = useState<Record<string, PontoEstadoPrevisao>>({})
   const [pontosList, setPontosList] = useState<Ponto[]>([])
   const [loadingInitial, setLoadingInitial] = useState<boolean>(true)
@@ -219,11 +223,14 @@ const Index: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6">
+    <PullToRefresh
+      onRefresh={handleRefreshAll}
+      className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100 pb-16 md:pb-6"
+    >
       {/* Container Principal */}
-      <div className="w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
+      <div className="w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col space-y-5">
         {/* Topo do App com Header e Seletor de Perfil */}
-        <header className="mb-5 space-y-4 border-b border-zinc-800/80 pb-4">
+        <header className="space-y-4 border-b border-zinc-800/80 pb-4">
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -292,42 +299,51 @@ const Index: React.FC = () => {
           </div>
         </header>
 
+        {/* 1. Briefing do Comandante (acima dos cards) */}
+        <section>
+          <BriefingCard
+            perfilId={perfil?.id || 'lancha'}
+            deviceId={deviceId}
+            ultimoBriefingInicial={preferencias?.ultimo_briefing}
+            updatedAtInicial={preferencias?.updated || preferencias?.created}
+          />
+        </section>
+
         {/* Mensagem de Erro Geral */}
         {generalError && (
-          <div className="mb-6 p-4 rounded-lg bg-red-950/40 border border-red-900/60 text-red-200 text-sm flex items-center justify-between">
-            <span>{generalError}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={carregarTodosPontos}
-              className="bg-red-900/60 border-red-800 text-xs"
-            >
-              Recarregar
-            </Button>
-          </div>
+          <ErrorState
+            title="Erro de Conexão"
+            message={generalError}
+            onRetry={carregarTodosPontos}
+          />
         )}
 
-        {/* Grid de 4 Cards (1 por ponto) */}
-        <main className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-          {pontosList.map((ponto) => {
-            const estado = pontosEstados[ponto.id] || {
-              ponto,
-              loading: true,
-              error: null,
-              data: null,
-              currentHourData: null,
-              statusSemaforo: null,
-            }
+        {/* Loading Inicial */}
+        {loadingInitial && !generalError && <LoadingState variant="cards" count={4} />}
 
-            return (
-              <PontoCard
-                key={ponto.id}
-                estado={estado}
-                onRetry={() => loadDadosPonto(ponto, perfil?.id || 'lancha')}
-              />
-            )
-          })}
-        </main>
+        {/* Grid de 4 Cards (1 por ponto) */}
+        {!loadingInitial && (
+          <main className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+            {pontosList.map((ponto) => {
+              const estado = pontosEstados[ponto.id] || {
+                ponto,
+                loading: true,
+                error: null,
+                data: null,
+                currentHourData: null,
+                statusSemaforo: null,
+              }
+
+              return (
+                <PontoCard
+                  key={ponto.id}
+                  estado={estado}
+                  onRetry={() => loadDadosPonto(ponto, perfil?.id || 'lancha')}
+                />
+              )
+            })}
+          </main>
+        )}
       </div>
 
       {/* Rodapé Oficial */}
@@ -336,7 +352,7 @@ const Index: React.FC = () => {
           Dados: Open-Meteo · maré modelada, não substitui a Tábua da DHN
         </p>
       </footer>
-    </div>
+    </PullToRefresh>
   )
 }
 
