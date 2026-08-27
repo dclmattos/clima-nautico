@@ -1,9 +1,8 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePerfil } from '@/contexts/PerfilContext'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw } from 'lucide-react'
+import { Ship, Sailboat, Zap, Settings, RefreshCw } from 'lucide-react'
 
 interface TopBarProps {
   ultimaAtualizacao?: Date | string | null
@@ -11,13 +10,25 @@ interface TopBarProps {
   isRefreshing?: boolean
 }
 
+interface PerfilOption {
+  id: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
+const PERFIS_OPTIONS: PerfilOption[] = [
+  { id: 'lancha', label: 'Lancha', icon: Ship },
+  { id: 'veleiro', label: 'Veleiro', icon: Sailboat },
+  { id: 'jet', label: 'Jet', icon: Zap },
+]
+
 export const TopBar: React.FC<TopBarProps> = ({
   ultimaAtualizacao,
   onRefresh,
   isRefreshing = false,
 }) => {
   const navigate = useNavigate()
-  const { perfil } = usePerfil()
+  const { perfil, setPerfil } = usePerfil()
 
   const formatHoraAtualizacao = (data?: Date | string | null) => {
     if (!data) {
@@ -48,9 +59,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   }
 
   const horaFormatada = formatHoraAtualizacao(ultimaAtualizacao)
-  const perfilNome = perfil?.nome
-    ? perfil.nome.charAt(0).toUpperCase() + perfil.nome.slice(1)
-    : 'Lancha'
+  const perfilAtivoId = (perfil?.id || perfil?.nome || 'lancha').toLowerCase()
 
   return (
     <header
@@ -59,11 +68,11 @@ export const TopBar: React.FC<TopBarProps> = ({
       }}
       className="fixed top-0 left-0 right-0 z-50 w-full bg-[#0a0e14]/95 backdrop-blur-md border-b border-white/[0.06] shadow-sm transition-all"
     >
-      <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
         {/* À esquerda: Logo / Título */}
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 focus:outline-none group text-left"
+          className="flex items-center gap-1.5 focus:outline-none group text-left shrink-0"
           title="Ir para o início"
         >
           <span className="font-sans font-semibold text-sm sm:text-base text-cyan-400 group-hover:text-cyan-300 transition-colors tracking-tight">
@@ -71,21 +80,52 @@ export const TopBar: React.FC<TopBarProps> = ({
           </span>
         </button>
 
-        {/* À direita: Perfil + Atualizado HH:MM + Botão Refresh */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Chip do Perfil Ativo */}
-          <Badge
-            variant="outline"
-            onClick={() => navigate('/config')}
-            className="cursor-pointer bg-[#141b24] hover:bg-cyan-950/60 border-zinc-700/70 hover:border-cyan-600 text-zinc-300 hover:text-cyan-200 text-[11px] font-medium px-2 py-0.5 transition-all shadow-sm flex items-center gap-1"
-            title="Alterar perfil de navegação"
+        {/* À direita: Seletor Segmentado de Perfil + Ícone Engrenagem + Atualizado/Refresh */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Seletor Segmentado dos 3 Perfis */}
+          <div
+            role="radiogroup"
+            aria-label="Perfil de navegação"
+            className="flex items-center bg-[#101620] p-0.5 rounded-lg border border-zinc-800 shadow-inner"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-            <span>{perfilNome}</span>
-          </Badge>
+            {PERFIS_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              const isSelected = perfilAtivoId === opt.id || perfilAtivoId.includes(opt.id)
 
-          {/* Texto de Atualização */}
-          <span className="text-[11px] text-zinc-400 whitespace-nowrap">
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() => setPerfil(opt.id)}
+                  title={`Perfil ${opt.label}`}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all select-none ${
+                    isSelected
+                      ? 'bg-cyan-500 text-zinc-950 font-semibold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className={isSelected ? 'inline' : 'hidden sm:inline'}>{opt.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Botão Ícone de Configurações */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/config')}
+            className="h-7 w-7 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition-colors shrink-0"
+            title="Configurações e Limites"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </Button>
+
+          {/* Texto de Atualização (escondido em telas muito pequenas para não quebrar layout) */}
+          <span className="text-[11px] text-zinc-400 whitespace-nowrap hidden md:inline">
             Atualizado <span className="font-mono text-zinc-300">{horaFormatada}</span>
           </span>
 
@@ -96,7 +136,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               size="icon"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="h-7 w-7 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition-colors"
+              className="h-7 w-7 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition-colors shrink-0"
               title="Atualizar dados agora"
             >
               <RefreshCw
