@@ -268,9 +268,11 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       )
     }
 
-    // Onda: se wave_height > onda_max_m, subtraia min(50, (wave_height - onda_max_m) / onda_max_m * 50).
+    // Onda: se wave_height > onda_max_m, subtraia min(50, (wave_height - onda_max_m) / (onda_max_m * 2) * 50).
     if (waveHeight !== null && waveHeight > perfilOndaMax) {
-      penalidadeOnda = Math.round(Math.min(50, ((waveHeight - perfilOndaMax) / perfilOndaMax) * 50))
+      penalidadeOnda = Math.round(
+        Math.min(50, ((waveHeight - perfilOndaMax) / (perfilOndaMax * 2)) * 50),
+      )
     }
 
     // Período: se periodo_min_s não for nulo e wave_period < periodo_min_s, subtraia min(30, (periodo_min_s - wave_period) / periodo_min_s * 30).
