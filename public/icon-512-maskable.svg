@@ -1,17 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" fill="#0a0e14"/>
-  <circle cx="256" cy="256" r="210" fill="none" stroke="#083344" stroke-width="4" stroke-dasharray="8 8" opacity="0.6"/>
-  <circle cx="256" cy="256" r="160" fill="none" stroke="#0e7490" stroke-width="3" opacity="0.4"/>
+  <!-- Safe padding area: decorative subtle radar rings -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#083344" stroke-width="4" stroke-dasharray="8 8" opacity="0.6"/>
+  <circle cx="256" cy="256" r="135" fill="none" stroke="#0e7490" stroke-width="3" opacity="0.4"/>
   
-  <g transform="translate(256, 256) scale(1.15)" stroke="#06b6d4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <!-- Anchor & Helm Centered (~60% area) -->
+  <g transform="translate(256, 256) scale(0.75)" stroke="#06b6d4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Anchor top ring -->
     <circle cx="0" cy="-120" r="28" stroke-width="18" fill="#082f49"/>
+    <!-- Anchor crossbar -->
     <line x1="-75" y1="-55" x2="75" y2="-55" stroke-width="18"/>
     <circle cx="-75" cy="-55" r="8" fill="#22d3ee" stroke="none"/>
     <circle cx="75" cy="-55" r="8" fill="#22d3ee" stroke="none"/>
+    <!-- Anchor shank -->
     <line x1="0" y1="-92" x2="0" y2="105" stroke-width="20" stroke="#38bdf8"/>
+    <!-- Anchor crescent / arms -->
     <path d="M -115 10 C -115 125 115 125 115 10" stroke-width="22" stroke="#06b6d4"/>
+    <!-- Anchor flukes -->
     <polygon points="-115,10 -138,4 -115,40" fill="#22d3ee" stroke="none"/>
     <polygon points="115,10 138,4 115,40" fill="#22d3ee" stroke="none"/>
+    <!-- Decorative center helm / star -->
     <circle cx="0" cy="0" r="14" fill="#22d3ee" stroke="#0a0e14" stroke-width="4"/>
   </g>
 </svg>
