@@ -231,7 +231,7 @@ export const JanelasPage: React.FC = () => {
   }
 
   // Busca o nascer e pôr do sol formatados para uma data
-  const getSunInfoStr = (pj: PontoJanelaItem, dateIso: string) => {
+  const getSunInfoStr = (pj: PontoComJanelas, dateIso: string) => {
     const diasSol = pj.janelasPayload?.dias_sol || []
     const dItem = diasSol.find((d) => d.date === dateIso)
     if (dItem?.nascer_sol && dItem?.por_sol) {
