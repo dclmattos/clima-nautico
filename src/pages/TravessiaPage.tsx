@@ -959,7 +959,7 @@ export default function TravessiaPage() {
           )}
 
           {/* BLOCO MELHOR ALTERNATIVA */}
-          {resultado.melhor_alternativa && (
+          {resultado.melhor_alternativa ? (
             <Card className="bg-gradient-to-r from-[#0d1722] to-[#08101a] border-cyan-600/60 shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
               <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1008,6 +1008,13 @@ export default function TravessiaPage() {
                 </Button>
               </CardContent>
             </Card>
+          ) : (
+            resultado.veredito !== 'verde' && (
+              <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-400 text-xs flex items-center gap-2">
+                <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
+                <span>Nenhuma saída melhor nas próximas 24 h</span>
+              </div>
+            )
           )}
 
           {/* LINHA DO TEMPO DAS 3 AMOSTRAS */}

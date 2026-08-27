@@ -123,6 +123,23 @@ export interface TravessiaAmostra {
   fator_limitante?: string | null
 }
 
+export interface TravessiaAlertaItem {
+  tipo: string
+  tipoDesc?: string
+  trecho: string
+  valor: number | null
+  unidade?: string
+}
+
+export interface TravessiaAlertaConsolidado {
+  tipo: string
+  tipoDesc?: string
+  unidade?: string
+  maxValor: number | null
+  trechos: string[]
+  trechoMax: string
+}
+
 export interface TravessiaAlternativa {
   hora_saida: string
   eta: string
@@ -130,6 +147,9 @@ export interface TravessiaAlternativa {
   veredito_cor: string
   score_minimo: number
   fator_limitante: string
+  aviso?: string | null
+  alertas?: TravessiaAlertaItem[]
+  alertas_consolidados?: TravessiaAlertaConsolidado[]
 }
 
 export interface TravessiaPontoInfo {
@@ -152,6 +172,8 @@ export interface TravessiaResultado {
   veredito: 'verde' | 'amarelo' | 'vermelho'
   veredito_cor: string
   aviso: string | null
+  alertas?: TravessiaAlertaItem[]
+  alertas_consolidados?: TravessiaAlertaConsolidado[]
   amostras: TravessiaAmostra[]
   combustivel_litros: number | null
   combustivel_com_reserva: number | null

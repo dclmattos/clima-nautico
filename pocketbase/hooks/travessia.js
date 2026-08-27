@@ -608,41 +608,160 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     horaLimiteSaidaIso = formatIsoSaoPaulo(maxSaidaMs)
   }
 
-  // 7. Veredito Final
-  // - 🟢 Verde: todos os scores >= 70 E sem rebaixamentos E sem chegada noturna
-  // - 🟡 Amarelo: algum score entre 50-69 OU qualquer rebaixamento OU chegada noturna (e nenhum < 50)
-  // - 🔴 Vermelho: algum score < 50
-  const scores = [amostra1.score, amostra2.score, amostra3.score]
-  const minScore = Math.min(...scores)
-  const temRebaixamento = amostra1.rebaixada || amostra2.rebaixada || amostra3.rebaixada
+  // Função unificada para consolidar alertas por tipo (ex: onda_traves, vento_proa, chegada_noturna, etc.)
+  const consolidarAlertas = (amostrasList, isNoite) => {
+    const rawAlertas = []
 
-  let veredito = 'verde'
-  let vereditoCor = '#22c55e'
-  let aviso = null
+    amostrasList.forEach((am) => {
+      const trechoNome = am.tipo === 'origem' ? 'início' : am.tipo === 'meio' ? 'meio' : 'final'
 
-  if (minScore < 50) {
-    veredito = 'vermelho'
-    vereditoCor = '#ef4444'
-  } else if (minScore < 70 || temRebaixamento || chegadaNoturna) {
-    veredito = 'amarelo'
-    vereditoCor = '#eab308'
-  } else {
-    veredito = 'verde'
-    vereditoCor = '#22c55e'
+      if (am.direcao_relativa === 'proa' && am.vento_nos > 15) {
+        rawAlertas.push({
+          tipo: 'vento_proa',
+          tipoDesc: 'Vento de proa',
+          trecho: trechoNome,
+          valor: am.vento_nos,
+          unidade: 'kt',
+        })
+      }
+      if (am.direcao_relativa === 'través' && am.altura_onda_m > 1.0) {
+        rawAlertas.push({
+          tipo: 'onda_traves',
+          tipoDesc: 'Onda de través',
+          trecho: trechoNome,
+          valor: am.altura_onda_m,
+          unidade: 'm',
+        })
+      }
+    })
+
+    if (isNoite) {
+      rawAlertas.push({
+        tipo: 'chegada_noturna',
+        tipoDesc: 'Chegada noturna',
+        trecho: 'final',
+        valor: null,
+        unidade: '',
+      })
+    }
+
+    // Agrupamento por tipo de alerta
+    const agrupados = {}
+    rawAlertas.forEach((al) => {
+      if (!agrupados[al.tipo]) {
+        agrupados[al.tipo] = {
+          tipo: al.tipo,
+          tipoDesc: al.tipoDesc,
+          unidade: al.unidade,
+          maxValor: al.valor,
+          trechos: [al.trecho],
+          trechoMax: al.trecho,
+        }
+      } else {
+        const ag = agrupados[al.tipo]
+        if (!ag.trechos.includes(al.trecho)) {
+          ag.trechos.push(al.trecho)
+        }
+        if (al.valor !== null && (ag.maxValor === null || al.valor > ag.maxValor)) {
+          ag.maxValor = al.valor
+          ag.trechoMax = al.trecho
+        }
+      }
+    })
+
+    // Monta mensagens consolidadas legíveis e array de alertas estruturados
+    const mensagensConsolidadas = []
+    const alertasConsolidados = []
+
+    Object.keys(agrupados).forEach((key) => {
+      const ag = agrupados[key]
+      alertasConsolidados.push(ag)
+
+      if (ag.tipo === 'chegada_noturna') {
+        mensagensConsolidadas.push('Chegada noturna (após o pôr do sol no destino)')
+      } else {
+        const valStr =
+          ag.unidade === 'm'
+            ? ag.maxValor.toFixed(1).replace('.', ',') + ' m'
+            : Math.round(ag.maxValor) + ' ' + ag.unidade
+
+        if (ag.trechos.length === 1) {
+          mensagensConsolidadas.push(ag.tipoDesc + ' até ' + valStr + ' no trecho ' + ag.trechos[0])
+        } else {
+          mensagensConsolidadas.push(
+            ag.tipoDesc + ' até ' + valStr + ' nos trechos ' + ag.trechos.join(', '),
+          )
+        }
+      }
+    })
+
+    return {
+      raw: rawAlertas,
+      consolidados: alertasConsolidados,
+      mensagens: mensagensConsolidadas,
+    }
   }
 
-  if (chegadaNoturna) {
-    aviso = 'chegada noturna'
-  } else if (temRebaixamento) {
-    const motivos = [
-      amostra1.motivo_rebaixamento,
-      amostra2.motivo_rebaixamento,
-      amostra3.motivo_rebaixamento,
-    ]
-      .filter(Boolean)
-      .join('; ')
-    aviso = 'Condições exigentes: ' + motivos
+  // Função única para calcular veredito completo
+  const calcularVereditoCompleto = (amostrasList, isNoite) => {
+    const scs = [amostrasList[0].score, amostrasList[1].score, amostrasList[2].score]
+    const mScore = Math.min(...scs)
+    const temReb =
+      amostrasList[0].rebaixada || amostrasList[1].rebaixada || amostrasList[2].rebaixada
+
+    let v = 'verde'
+    let vCor = '#22c55e'
+
+    if (mScore < 50) {
+      v = 'vermelho'
+      vCor = '#ef4444'
+    } else if (mScore < 70 || temReb || isNoite) {
+      v = 'amarelo'
+      vCor = '#eab308'
+    } else {
+      v = 'verde'
+      vCor = '#22c55e'
+    }
+
+    const alertasInfo = consolidarAlertas(amostrasList, isNoite)
+
+    let avisoMsg = null
+    if (alertasInfo.mensagens.length > 0) {
+      avisoMsg = alertasInfo.mensagens.join('; ')
+    } else if (isNoite) {
+      avisoMsg = 'chegada noturna'
+    }
+
+    // Fator limitante mais expressivo
+    const allLimiters = [
+      amostrasList[0].fator_limitante,
+      amostrasList[1].fator_limitante,
+      amostrasList[2].fator_limitante,
+    ].filter(Boolean)
+    const fatorLim =
+      allLimiters[0] ||
+      (isNoite ? 'chegada noturna' : temReb ? 'rebaixamento de mar/vento' : 'nenhum')
+
+    return {
+      veredito: v,
+      vereditoCor: vCor,
+      minScore: mScore,
+      temRebaixamento: temReb,
+      chegadaNoturna: isNoite,
+      aviso: avisoMsg,
+      alertas: alertasInfo.raw,
+      alertas_consolidados: alertasInfo.consolidados,
+      fatorLimitante: fatorLim,
+    }
   }
+
+  // 7. Veredito Final da Travessia Principal
+  const vereditoPrincipal = calcularVereditoCompleto(amostras, chegadaNoturna)
+  const veredito = vereditoPrincipal.veredito
+  const vereditoCor = vereditoPrincipal.vereditoCor
+  const aviso = vereditoPrincipal.aviso
+  const alertas = vereditoPrincipal.alertas
+  const alertasConsolidados = vereditoPrincipal.alertas_consolidados
 
   // 8. Combustível
   let combustivelLitros = null
@@ -653,88 +772,99 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     combustivelComReserva = Math.round(combustivelLitros * 1.2 * 10) / 10
   }
 
-  // 9. Busca de Melhor Alternativa (se veredito != 'verde')
+  // 9. Varredura de Alternativas
+  // Regras:
+  // (a) Usar a MESMA função de veredito completo (calcularVereditoCompleto)
+  // (b) Excluir a hora de saída original da varredura (hStep = 1..24 garante offset > 0)
+  // (c) Só sugerir alternativa se for ESTRITAMENTE MELHOR que a travessia original:
+  //     Qualidade: verde > amarelo > vermelho.
+  //     Em empate de cor, comparar pelo score mínimo entre as 3 amostras (maior score mínimo vence).
+  //     Se nenhum candidato for estritamente melhor, melhorAlternativa = null.
+
+  const rankVeredito = (ver) => {
+    if (ver === 'verde') return 3
+    if (ver === 'amarelo') return 2
+    return 1 // vermelho
+  }
+
+  const principalRank = rankVeredito(veredito)
+  const principalMinScore = vereditoPrincipal.minScore
+
+  // Função comparadora: retorna true se candidate for estritamente melhor que target
+  const isEstritamenteMelhor = (candRank, candMinScore, baseRank, baseMinScore) => {
+    if (candRank > baseRank) return true
+    if (candRank === baseRank && candMinScore > baseMinScore) return true
+    return false
+  }
+
   let melhorAlternativa = null
-  if (veredito !== 'verde') {
-    let bestCandidate = null
-    let bestMinScore = -1
+  let bestCandidate = null
+  let bestRank = principalRank
+  let bestMinScore = principalMinScore
 
-    // Varre saídas de hora em hora nas próximas 24h
-    for (let hStep = 1; hStep <= 24; hStep++) {
-      const candSaidaMs = horaSaidaMs + hStep * 3600 * 1000
-      const candMeioMs = candSaidaMs + duracaoMs / 2
-      const candEtaMs = candSaidaMs + duracaoMs
+  // Varre saídas de hora em hora nas próximas 24h (hStep = 1 a 24, excluindo a hora original hStep=0)
+  for (let hStep = 1; hStep <= 24; hStep++) {
+    const candSaidaMs = horaSaidaMs + hStep * 3600 * 1000
+    const candMeioMs = candSaidaMs + duracaoMs / 2
+    const candEtaMs = candSaidaMs + duracaoMs
 
-      const candSaidaIso = formatIsoSaoPaulo(candSaidaMs)
-      const candMeioIso = formatIsoSaoPaulo(candMeioMs)
-      const candEtaIso = formatIsoSaoPaulo(candEtaMs)
+    const candSaidaIso = formatIsoSaoPaulo(candSaidaMs)
+    const candMeioIso = formatIsoSaoPaulo(candMeioMs)
+    const candEtaIso = formatIsoSaoPaulo(candEtaMs)
 
-      const candHOrigem = findHourlyAt(prevOrigem.hourly, candSaidaIso)
-      const candHMeio = findHourlyAt(prevMeio.hourly, candMeioIso)
-      const candHDestino = findHourlyAt(prevDestino.hourly, candEtaIso)
+    const candHOrigem = findHourlyAt(prevOrigem.hourly, candSaidaIso)
+    const candHMeio = findHourlyAt(prevMeio.hourly, candMeioIso)
+    const candHDestino = findHourlyAt(prevDestino.hourly, candEtaIso)
 
-      const a1 = calcAmostra('origem', pontoOrigem, candSaidaIso, candHOrigem)
-      const a2 = calcAmostra('meio', pontoMeio, candMeioIso, candHMeio)
-      const a3 = calcAmostra('destino', pontoDestino, candEtaIso, candHDestino)
+    const a1 = calcAmostra('origem', pontoOrigem, candSaidaIso, candHOrigem)
+    const a2 = calcAmostra('meio', pontoMeio, candMeioIso, candHMeio)
+    const a3 = calcAmostra('destino', pontoDestino, candEtaIso, candHDestino)
+    const candAmostras = [a1, a2, a3]
 
-      const candScores = [a1.score, a2.score, a3.score]
-      const candMinScore = Math.min(...candScores)
-      const candTemReb = a1.rebaixada || a2.rebaixada || a3.rebaixada
-
-      // Checa pôr do sol para a candidata
-      const candEtaDate = candEtaIso.slice(0, 10)
-      let candSunset = null
-      for (let k = 0; k < dList.length; k++) {
-        if (dList[k].date === candEtaDate) {
-          candSunset = dList[k].sunset
-          break
-        }
-      }
-      const candNoite = candSunset ? candEtaMs > parseDateSaoPaulo(candSunset) : false
-
-      let candVeredito = 'verde'
-      if (candMinScore < 50) {
-        candVeredito = 'vermelho'
-      } else if (candMinScore < 70 || candTemReb || candNoite) {
-        candVeredito = 'amarelo'
-      }
-
-      // Procura primeiro por candidatos VERDE, senão maior score diurno
-      // Fator limitante representativo
-      const allLimiters = [a1.fator_limitante, a2.fator_limitante, a3.fator_limitante].filter(
-        Boolean,
-      )
-      const candLimiter = allLimiters[0] || (candNoite ? 'chegada noturna' : 'vento/mar')
-
-      // Pontuação para comparação
-      let candRank = candMinScore
-      if (candVeredito === 'verde') candRank += 1000
-      if (!candNoite) candRank += 500
-
-      if (candRank > bestMinScore) {
-        bestMinScore = candRank
-        bestCandidate = {
-          hora_saida: candSaidaIso,
-          eta: candEtaIso,
-          veredito: candVeredito,
-          veredito_cor:
-            candVeredito === 'verde'
-              ? '#22c55e'
-              : candVeredito === 'amarelo'
-                ? '#eab308'
-                : '#ef4444',
-          score_minimo: candMinScore,
-          fator_limitante: candLimiter,
-        }
+    // Checa pôr do sol para a candidata
+    const candEtaDate = candEtaIso.slice(0, 10)
+    let candSunset = null
+    for (let k = 0; k < dList.length; k++) {
+      if (dList[k].date === candEtaDate) {
+        candSunset = dList[k].sunset
+        break
       }
     }
+    const candNoite = candSunset ? candEtaMs > parseDateSaoPaulo(candSunset) : false
 
-    if (
-      bestCandidate &&
-      (bestCandidate.veredito === 'verde' || bestCandidate.score_minimo > minScore)
-    ) {
-      melhorAlternativa = bestCandidate
+    // Calcula veredito completo do candidato com as MESMAS regras da travessia principal
+    const candVereditoObj = calcularVereditoCompleto(candAmostras, candNoite)
+    const candRankVal = rankVeredito(candVereditoObj.veredito)
+    const candMinScoreVal = candVereditoObj.minScore
+
+    if (isEstritamenteMelhor(candRankVal, candMinScoreVal, bestRank, bestMinScore)) {
+      bestRank = candRankVal
+      bestMinScore = candMinScoreVal
+      bestCandidate = {
+        hora_saida: candSaidaIso,
+        eta: candEtaIso,
+        veredito: candVereditoObj.veredito,
+        veredito_cor: candVereditoObj.vereditoCor,
+        score_minimo: candMinScoreVal,
+        fator_limitante: candVereditoObj.fatorLimitante,
+        aviso: candVereditoObj.aviso,
+        alertas: candVereditoObj.alertas,
+        alertas_consolidados: candVereditoObj.alertas_consolidados,
+      }
     }
+  }
+
+  // Se encontramos algum candidato estritamente melhor que a travessia original
+  if (
+    bestCandidate &&
+    isEstritamenteMelhor(
+      rankVeredito(bestCandidate.veredito),
+      bestCandidate.score_minimo,
+      principalRank,
+      principalMinScore,
+    )
+  ) {
+    melhorAlternativa = bestCandidate
   }
 
   const responsePayload = {
@@ -761,6 +891,8 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     veredito: veredito,
     veredito_cor: vereditoCor,
     aviso: aviso,
+    alertas: alertas,
+    alertas_consolidados: alertasConsolidados,
     amostras: amostras,
     combustivel_litros: combustivelLitros,
     combustivel_com_reserva: combustivelComReserva,

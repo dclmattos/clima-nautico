@@ -40,6 +40,7 @@ import {
   formatCoordinatesDMM,
   fetchPrevisaoPorPonto,
 } from '@/services/previsaoService'
+import { SeletorMapaLeaflet } from '@/components/SeletorMapaLeaflet'
 import {
   Settings,
   ArrowLeft,
@@ -64,6 +65,8 @@ import {
   Loader2,
   AlertCircle,
   Compass,
+  Copy,
+  Check,
 } from 'lucide-react'
 
 export const ConfigPage: React.FC = () => {
@@ -87,6 +90,8 @@ export const ConfigPage: React.FC = () => {
   const [geoLoading, setGeoLoading] = useState(false)
   const [savingPonto, setSavingPonto] = useState(false)
   const [formErro, setFormErro] = useState<string | null>(null)
+  const [isTerraError, setIsTerraError] = useState(false)
+  const [copiedFormat, setCopiedFormat] = useState<'decimal' | 'dmm' | null>(null)
 
   const reloadPontos = () => {
     setPontosCustom(getPontosPersonalizados())
@@ -112,6 +117,7 @@ export const ConfigPage: React.FC = () => {
     setFormLon(null)
     setFormTipo('abrigado')
     setFormErro(null)
+    setIsTerraError(false)
     setModalOpen(true)
   }
 
@@ -123,7 +129,50 @@ export const ConfigPage: React.FC = () => {
     setFormLon(p.lon)
     setFormTipo(p.tipo)
     setFormErro(null)
+    setIsTerraError(false)
     setModalOpen(true)
+  }
+
+  const handleMapPositionChange = (lat: number, lon: number) => {
+    setFormLat(lat)
+    setFormLon(lon)
+    setFormCoordsStr(`${lat.toFixed(4)}, ${lon.toFixed(4)}`)
+    setIsTerraError(false)
+    if (formErro) setFormErro(null)
+  }
+
+  const handleManualCoordsChange = (val: string) => {
+    setFormCoordsStr(val)
+    setIsTerraError(false)
+    if (formErro) setFormErro(null)
+
+    if (!val.trim()) {
+      return
+    }
+
+    const parsed = parseCoordinatesInput(val)
+    if (parsed) {
+      setFormLat(parsed.lat)
+      setFormLon(parsed.lon)
+    }
+  }
+
+  const handleCopyCoords = async (text: string, format: 'decimal' | 'dmm') => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedFormat(format)
+      setTimeout(() => setCopiedFormat(null), 2000)
+      toast({
+        title: 'Copiado!',
+        description: `Coordenadas (${format.toUpperCase()}) copiadas com sucesso.`,
+      })
+    } catch {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Não foi possível acessar a área de transferência.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const handleUsarLocalizacaoAtual = () => {
@@ -138,6 +187,7 @@ export const ConfigPage: React.FC = () => {
 
     setGeoLoading(true)
     setFormErro(null)
+    setIsTerraError(false)
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -157,7 +207,8 @@ export const ConfigPage: React.FC = () => {
         console.warn('Erro ao obter geolocalização:', err)
         toast({
           title: 'Localização indisponível',
-          description: 'Não foi possível obter sua posição. Digite as coordenadas manualmente.',
+          description:
+            'Não foi possível obter sua posição. Digite as coordenadas manualmente ou use o mapa.',
           variant: 'destructive',
         })
       },
@@ -168,6 +219,7 @@ export const ConfigPage: React.FC = () => {
   const handleSalvarPonto = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormErro(null)
+    setIsTerraError(false)
 
     const nomeTrimmed = formNome.trim()
     if (!nomeTrimmed) {
@@ -175,7 +227,7 @@ export const ConfigPage: React.FC = () => {
       return
     }
 
-    // Parse de coordenadas se digitado
+    // Parse de coordenadas se digitado ou sincronizado
     let lat = formLat
     let lon = formLon
 
@@ -185,15 +237,13 @@ export const ConfigPage: React.FC = () => {
         lat = parsed.lat
         lon = parsed.lon
       } else if (lat === null || lon === null) {
-        setFormErro(
-          "Formato de coordenadas inválido. Use decimal (-23.1234, -44.1234) ou DMM (23°07.40'S 044°19.08'W).",
-        )
+        setFormErro('Coordenadas não reconhecidas')
         return
       }
     }
 
     if (lat === null || lon === null) {
-      setFormErro('Por favor, informe a localização do ponto.')
+      setFormErro('Por favor, toque no mapa ou informe as coordenadas do ponto.')
       return
     }
 
@@ -209,19 +259,19 @@ export const ConfigPage: React.FC = () => {
       })
     } catch (apiErr: any) {
       setSavingPonto(false)
-      const msg = apiErr?.message || ''
+      const msg = (apiErr?.message || '').toLowerCase()
       if (msg.includes('terra') || msg.includes('ajuste para o mar')) {
+        setIsTerraError(true)
         toast({
           title: 'Coordenada em terra',
-          description: 'esta posição parece estar em terra — ajuste para o mar',
+          description: 'Esta posição parece estar em terra — ajuste para o mar',
           variant: 'destructive',
           duration: 4500,
         })
-        setFormErro('esta posição parece estar em terra — ajuste para o mar')
+        setFormErro('Esta posição parece estar em terra — ajuste para o mar')
         return
       }
-      // Se for outro erro temporário (ex: 502 de rede do open meteo), exibe aviso mas não bloqueia se for erro transitório
-      console.warn('Erro ao validar ponto na API:', apiErr)
+      console.warn('Aviso na validação de API:', apiErr)
     }
 
     if (editingPonto) {
@@ -797,14 +847,15 @@ export const ConfigPage: React.FC = () => {
 
       {/* MODAL ADICIONAR / EDITAR PONTO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-lg bg-[#0d131b] border-cyan-900/60 text-zinc-100 shadow-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0d131b] border-cyan-900/60 text-zinc-100 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
               <MapPin className="w-4 h-4 text-cyan-400" />
               {editingPonto ? 'Editar ponto personalizado' : 'Adicionar ponto personalizado'}
             </DialogTitle>
             <DialogDescription className="text-xs text-zinc-400">
-              Insira a posição geográfica e o grau de proteção contra vento e ondulação.
+              Posicione no mapa ou cole coordenadas de qualquer formato para monitorar vento e
+              ondas.
             </DialogDescription>
           </DialogHeader>
 
@@ -828,42 +879,105 @@ export const ConfigPage: React.FC = () => {
               />
             </div>
 
-            {/* Localização: Opção (a) Geolocalização e Opção (b) Entrada manual */}
+            {/* SELETOR NO MAPA (LEAFLET + OSM + OPENSEAMAP) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="ponto-coords" className="text-xs font-medium text-zinc-300">
-                  Localização / Coordenadas <span className="text-red-400">*</span>
+                <Label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                  Posição no Mapa (Baía de Ilha Grande)
                 </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUsarLocalizacaoAtual}
-                  disabled={geoLoading || savingPonto}
-                  className="bg-[#161c24] border-cyan-800 text-cyan-300 hover:bg-cyan-950/60 text-[11px] h-7 px-2.5 gap-1.5"
-                >
-                  {geoLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Navigation className="w-3 h-3" />
-                  )}
-                  Usar localização atual
-                </Button>
+                <span className="text-[11px] text-zinc-400">
+                  Toque para marcar · Arraste para ajustar
+                </span>
               </div>
 
+              <SeletorMapaLeaflet
+                lat={formLat}
+                lon={formLon}
+                onChange={handleMapPositionChange}
+                pontosExistentes={pontosCustom}
+                pontoEditandoId={editingPonto?.id}
+                isTerraError={isTerraError}
+                onMinhaLocalizacao={handleUsarLocalizacaoAtual}
+                geoLoading={geoLoading}
+              />
+            </div>
+
+            {/* COORDENADAS EM TEMPO REAL (DOIS FORMATOS COM BOTÃO COPIAR) */}
+            {formLat !== null && formLon !== null && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-[#090e15] border border-zinc-800">
+                {/* Formato Decimal */}
+                <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#111722] border border-zinc-800/80">
+                  <div className="min-w-0">
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
+                      Decimal
+                    </span>
+                    <span className="font-mono text-xs text-cyan-300 truncate block">
+                      {formLat.toFixed(4)}, {formLon.toFixed(4)}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      handleCopyCoords(`${formLat.toFixed(4)}, ${formLon.toFixed(4)}`, 'decimal')
+                    }
+                    className="h-7 w-7 p-0 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-950/50 shrink-0"
+                    title="Copiar formato decimal"
+                  >
+                    {copiedFormat === 'decimal' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+                </div>
+
+                {/* Formato Graus/Minutos (DMM) */}
+                <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#111722] border border-zinc-800/80">
+                  <div className="min-w-0">
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
+                      Graus/Minutos (DMM)
+                    </span>
+                    <span className="font-mono text-xs text-indigo-300 truncate block">
+                      {formatCoordinatesDMM(formLat, formLon)}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyCoords(formatCoordinatesDMM(formLat, formLon), 'dmm')}
+                    className="h-7 w-7 p-0 text-zinc-400 hover:text-indigo-300 hover:bg-indigo-950/50 shrink-0"
+                    title="Copiar formato graus e minutos"
+                  >
+                    {copiedFormat === 'dmm' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Campo de Texto Editável Sincronizado nos Dois Sentidos (Entrada Manual / Colar Links) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ponto-coords" className="text-xs font-medium text-zinc-300">
+                Entrada manual / Colar coordenadas ou link do Google Maps
+              </Label>
               <Input
                 id="ponto-coords"
-                placeholder="Decimal (-23.1234, -44.1234) ou DMM (23°07.40'S 044°19.08'W)"
+                placeholder="Ex: -23.0083, -44.3183 ou 23°00.50'S 044°19.10'W ou link do Maps"
                 value={formCoordsStr}
-                onChange={(e) => {
-                  setFormCoordsStr(e.target.value)
-                  if (formErro) setFormErro(null)
-                }}
+                onChange={(e) => handleManualCoordsChange(e.target.value)}
                 disabled={savingPonto}
                 className="bg-[#070b10] border-zinc-700/80 focus-visible:border-cyan-500 text-zinc-100 placeholder:text-zinc-500 text-xs h-9 font-mono"
               />
-              <p className="text-[10px] text-zinc-500">
-                Aceita formato decimal simples ou graus e minutos náuticos com hemisfério.
+              <p className="text-[10px] text-zinc-400">
+                Aceita Decimal, Graus-Minutos (DMM), Graus-Minutos-Segundos (DMS) e links do Google
+                Maps.
               </p>
             </div>
 

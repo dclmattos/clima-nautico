@@ -499,51 +499,159 @@ export function formatCoordinatesDMM(lat: number, lon: number): string {
 }
 
 /**
- * Parser de entrada de coordenadas (decimal ou Graus/Minutos)
+ * Helper interno para validar latitude e longitude
+ */
+function isValidLatLng(lat: number, lon: number): boolean {
+  return !isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
+/**
+ * Parser de graus, minutos e segundos (DMS ou DMM) para decimal
+ */
+function parseDmsOrDmmToken(
+  degStr: string,
+  minStr?: string,
+  secStr?: string,
+  hemiStr?: string,
+): number | null {
+  const deg = parseFloat(degStr)
+  if (isNaN(deg)) return null
+  const min = minStr ? parseFloat(minStr) : 0
+  const sec = secStr ? parseFloat(secStr) : 0
+
+  let dec = deg + min / 60 + sec / 3600
+  if (hemiStr) {
+    const h = hemiStr.toUpperCase()
+    if (h === 'S' || h === 'W' || h === 'O') {
+      dec = -Math.abs(dec)
+    } else if (h === 'N' || h === 'E' || h === 'L') {
+      dec = Math.abs(dec)
+    }
+  }
+  return dec
+}
+
+/**
+ * Parser tolerante de coordenadas
  * Suporta:
- * - "-23.1234, -44.1234"
- * - "-23.1234 -44.1234"
- * - "23°07.40'S 044°19.08'W"
- * - "23° 07.40' S, 44° 19.08' W"
- * - "23 07.40 S, 044 19.08 W"
+ * - Decimal: `-23.0083, -44.3183`, `-23.0083 -44.3183`, `(-23.0083, -44.3183)`
+ * - Graus-minutos: `23°00.50'S 044°19.10'W`, `23 00.50 S 044 19.10 W`
+ * - Graus-minutos-segundos: `23°00'30"S 044°19'06"W`, `23°00'30.0"S+44°19'06.0"W`
+ * - Separadores: vírgula, ponto e vírgula ou espaço entre lat e lon
+ * - Parênteses e aspas limpas
+ * - Hemisfério por letra (N/S, E/W/O) ou por sinal (- para S ou W)
+ * - Links do Google Maps: https://www.google.com/maps/place/... ou ?q=-23.0083,-44.3183 ou @-23.0083,-44.3183
  */
 export function parseCoordinatesInput(input: string): { lat: number; lon: number } | null {
   if (!input) return null
-  const str = input.trim()
+  let raw = decodeURIComponent(input.trim())
 
-  // 1. Tenta formato decimal simples: -23.1234, -44.1234 ou -23.1234 -44.1234
-  const decimalRegex = /^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/
-  const decMatch = str.match(decimalRegex)
-  if (decMatch) {
-    const lat = parseFloat(decMatch[1])
-    const lon = parseFloat(decMatch[2])
-    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+  // Se for ou contiver um link do Google Maps / Apple Maps / OpenStreetMap
+  if (
+    raw.includes('maps.google') ||
+    raw.includes('google.com/maps') ||
+    raw.includes('goo.gl/maps') ||
+    raw.includes('maps.app.goo.gl') ||
+    raw.includes('openstreetmap.org')
+  ) {
+    // 1. Tenta extrair `@-23.0083,-44.3183`
+    const atMatch = raw.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1])
+      const lon = parseFloat(atMatch[2])
+      if (isValidLatLng(lat, lon)) return { lat, lon }
+    }
+
+    // 2. Tenta extrair `q=-23.0083,-44.3183` ou `query=-23.0083,-44.3183` ou `ll=-23.0083,-44.3183`
+    const qMatch = raw.match(/[?&](?:q|query|ll|center|loc)=(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/i)
+    if (qMatch) {
+      const lat = parseFloat(qMatch[1])
+      const lon = parseFloat(qMatch[2])
+      if (isValidLatLng(lat, lon)) return { lat, lon }
+    }
+
+    // 3. Tenta extrair /place/ com DMS ou Decimal: `/place/23%C2%B000'30.0%22S+44%C2%B019'06.0%22W` ou `/place/-23.0083,-44.3183`
+    const placeMatch = raw.match(/\/place\/([^/@?]+)/)
+    if (placeMatch) {
+      const placeStr = placeMatch[1].replace(/\+/g, ' ')
+      const parsedPlace = parseCoordinatesInput(placeStr)
+      if (parsedPlace) return parsedPlace
+    }
+  }
+
+  // Remove parênteses externos, aspas (simples ou duplas normais ou tipográficas) e colchetes
+  let clean = raw
+    .replace(/[()[\]{}]/g, ' ')
+    .replace(/[“”"″]/g, '"')
+    .replace(/[‘’'′]/g, "'")
+    .replace(/\+/g, ' ')
+    .trim()
+
+  // 1. Decimal com ou sem sinal, com ou sem hemisfério
+  // Ex: -23.0083, -44.3183 | -23.0083 -44.3183 | 23.0083 S, 44.3183 W | -23.0083; -44.3183
+  const decimalWithHemiRegex =
+    /^(-?\d{1,2}(?:\.\d+)?)\s*([NSns])?[,;\s]+(-?\d{1,3}(?:\.\d+)?)\s*([EWewOo])?$/
+  const decHemiMatch = clean.match(decimalWithHemiRegex)
+  if (decHemiMatch) {
+    let lat = parseFloat(decHemiMatch[1])
+    const latH = decHemiMatch[2]?.toUpperCase()
+    let lon = parseFloat(decHemiMatch[3])
+    const lonH = decHemiMatch[4]?.toUpperCase()
+
+    if (latH === 'S') lat = -Math.abs(lat)
+    else if (latH === 'N') lat = Math.abs(lat)
+
+    if (lonH === 'W' || lonH === 'O') lon = -Math.abs(lon)
+    else if (lonH === 'E' || lonH === 'L') lon = Math.abs(lon)
+
+    if (isValidLatLng(lat, lon)) return { lat, lon }
+  }
+
+  // 2. Graus, Minutos e Segundos (DMS): ex: 23°00'30"S 044°19'06"W ou 23 00 30 S 44 19 06 W
+  // Lat: (\d{1,2})[°\s]+(\d{1,2})['\s]+(\d+(?:\.\d+)?)["\s]*([NSns])
+  // Lon: (\d{1,3})[°\s]+(\d{1,2})['\s]+(\d+(?:\.\d+)?)["\s]*([EWewOo])
+  const dmsRegex =
+    /(\d{1,2})[°\s]+(\d{1,2})['\s]+(\d+(?:\.\d+)?)["\s]*([NSns])[,;\s]+(\d{1,3})[°\s]+(\d{1,2})['\s]+(\d+(?:\.\d+)?)["\s]*([EWewOo])/i
+  const dmsMatch = clean.match(dmsRegex)
+  if (dmsMatch) {
+    const lat = parseDmsOrDmmToken(dmsMatch[1], dmsMatch[2], dmsMatch[3], dmsMatch[4])
+    const lon = parseDmsOrDmmToken(dmsMatch[5], dmsMatch[6], dmsMatch[7], dmsMatch[8])
+    if (lat !== null && lon !== null && isValidLatLng(lat, lon)) {
       return { lat, lon }
     }
   }
 
-  // 2. Tenta formato Graus e Minutos Decimais (DMM): ex "23°07.40'S 044°19.08'W" ou "23 07.40 S 044 19.08 W"
-  // Lat: (\d{1,2})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([NSns])
-  // Lon: (\d{1,3})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([EWewOo])
+  // 3. Graus e Minutos Decimais (DMM): ex: 23°00.50'S 044°19.10'W ou 23 00.50 S 044 19.10 W
   const dmmRegex =
-    /(\d{1,2})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([NSns])[,\s]+(\d{1,3})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([EWewOo])/
-  const dmmMatch = str.match(dmmRegex)
+    /(\d{1,2})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([NSns])[,;\s]+(\d{1,3})[°\s]+(\d+(?:\.\d+)?)[′'\s]*([EWewOo])/i
+  const dmmMatch = clean.match(dmmRegex)
   if (dmmMatch) {
-    const latDeg = parseFloat(dmmMatch[1])
-    const latMin = parseFloat(dmmMatch[2])
-    const latHemi = dmmMatch[3].toUpperCase()
+    const lat = parseDmsOrDmmToken(dmmMatch[1], dmmMatch[2], undefined, dmmMatch[3])
+    const lon = parseDmsOrDmmToken(dmmMatch[4], dmmMatch[5], undefined, dmmMatch[6])
+    if (lat !== null && lon !== null && isValidLatLng(lat, lon)) {
+      return { lat, lon }
+    }
+  }
 
-    const lonDeg = parseFloat(dmmMatch[4])
-    const lonMin = parseFloat(dmmMatch[5])
-    const lonHemi = dmmMatch[6].toUpperCase()
+  // 4. Formato com hemisfério no início: S 23°00'30" W 044°19'06" ou S 23 00.50 W 44 19.10
+  const hemiFirstRegex =
+    /([NSns])\s*(\d{1,2})[°\s]+(\d+(?:\.\d+)?)(?:['\s]+(\d+(?:\.\d+)?)["\s]*)?[,;\s]+([EWewOo])\s*(\d{1,3})[°\s]+(\d+(?:\.\d+)?)(?:['\s]+(\d+(?:\.\d+)?)["\s]*)?/i
+  const hfMatch = clean.match(hemiFirstRegex)
+  if (hfMatch) {
+    const lat = parseDmsOrDmmToken(hfMatch[2], hfMatch[3], hfMatch[4], hfMatch[1])
+    const lon = parseDmsOrDmmToken(hfMatch[6], hfMatch[7], hfMatch[8], hfMatch[5])
+    if (lat !== null && lon !== null && isValidLatLng(lat, lon)) {
+      return { lat, lon }
+    }
+  }
 
-    let lat = latDeg + latMin / 60
-    if (latHemi === 'S') lat = -lat
-
-    let lon = lonDeg + lonMin / 60
-    if (lonHemi === 'W' || lonHemi === 'O') lon = -lon
-
-    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+  // 5. Busca genérica de pares numéricos com ou sem separador
+  const anyPairRegex = /(-?\d{1,2}(?:\.\d+)?)[^\d-]+(-?\d{1,3}(?:\.\d+)?)/
+  const anyPairMatch = clean.match(anyPairRegex)
+  if (anyPairMatch) {
+    const lat = parseFloat(anyPairMatch[1])
+    const lon = parseFloat(anyPairMatch[2])
+    if (isValidLatLng(lat, lon)) {
       return { lat, lon }
     }
   }
