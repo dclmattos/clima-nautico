@@ -179,7 +179,24 @@ export interface TravessiaResultado {
   combustivel_com_reserva: number | null
   melhor_alternativa: TravessiaAlternativa | null
   hora_limite_saida: string | null
-  narrativa_bloqueada?: boolean
+}
+
+export interface ResumoDiaResultado {
+  melhor: {
+    ponto_nome: string
+    slug: string
+    score_medio: number
+    janela_inicio: string | null
+    janela_fim: string | null
+  } | null
+  evitar: {
+    ponto_nome: string
+    slug: string
+    score_medio: number
+    fator_limitante: string | null
+  } | null
+  frente_fria: string
+  atualizado_em: string
 }
 
 export interface TravessiaParams {

@@ -349,43 +349,37 @@ export async function fetchCalculoTravessia(
 }
 
 /**
- * Solicita narrativa do comandante para a travessia com IA
+ * Solicita resumo consolidado do dia
  */
-export async function fetchNarrativaTravessia(
-  resultado: import('@/types/nautico').TravessiaResultado,
+export async function fetchResumoDia(
+  perfilId: string,
   dispositivoUuid?: string,
-): Promise<{ narrativa: string; requisicoes_restantes?: number; bloqueado?: boolean }> {
+  pontosPersonalizados?: Array<{
+    id: string
+    nome: string
+    lat: number
+    lon: number
+    tipo: string
+  }>,
+): Promise<import('@/types/nautico').ResumoDiaResultado> {
   const backendUrl = pb.baseUrl || ''
-  const url = `${backendUrl}/backend/v1/narrativa-travessia`
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
+  const queryParams = new URLSearchParams()
+  queryParams.set('perfil_id', perfilId)
   if (dispositivoUuid) {
-    headers['X-Device-Id'] = dispositivoUuid
+    queryParams.set('dispositivo_uuid', dispositivoUuid)
+  }
+  if (pontosPersonalizados && pontosPersonalizados.length > 0) {
+    queryParams.set('pontos_personalizados', JSON.stringify(pontosPersonalizados))
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ resultado }),
-  })
-
-  if (res.status === 429) {
-    return {
-      narrativa: '',
-      bloqueado: true,
-    }
-  }
-
+  const url = `${backendUrl}/backend/v1/resumo-dia?${queryParams.toString()}`
+  const res = await fetch(url)
   if (!res.ok) {
-    let errorDetail = 'Não foi possível obter a narrativa do comandante'
+    let errorDetail = 'Falha ao obter resumo do dia'
     try {
       const errJson = await res.json()
-      if (errJson?.erro) {
-        errorDetail = errJson.erro
-      } else if (errJson?.error) {
-        errorDetail = errJson.error
+      if (errJson?.erro || errJson?.error) {
+        errorDetail = errJson.erro || errJson.error
       }
     } catch {
       errorDetail = `Erro no servidor (${res.status})`
@@ -393,7 +387,7 @@ export async function fetchNarrativaTravessia(
     throw new Error(errorDetail)
   }
 
-  const data = await res.json()
+  const data: import('@/types/nautico').ResumoDiaResultado = await res.json()
   return data
 }
 

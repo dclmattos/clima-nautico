@@ -27,6 +27,7 @@ import {
   MapPin,
   Flame,
 } from 'lucide-react'
+import { TopBar } from '@/components/TopBar'
 
 interface PontoComJanelas {
   ponto: Ponto
@@ -248,39 +249,44 @@ export const JanelasPage: React.FC = () => {
 
   return (
     <div
-      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
-      className="space-y-6"
+      style={{
+        paddingTop: 'calc(3.25rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+      }}
+      className="max-w-4xl mx-auto px-4 py-4 space-y-6"
     >
+      <TopBar
+        ultimaAtualizacao={new Date()}
+        onRefresh={() => carregarTodasJanelas(true)}
+        isRefreshing={refreshing}
+      />
+
       {/* Cabeçalho da Página */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Compass className="w-6 h-6 text-cyan-400" />
-            <h1 className="text-2xl font-black text-white tracking-tight">Janelas de Navegação</h1>
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="flex items-center gap-2">
+          <Compass className="w-5 h-5 text-cyan-400" />
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-tight">Janelas de Navegação</h1>
+            <p className="text-xs text-zinc-400">
+              Períodos ideais diurnos (≥70 pts) para{' '}
+              <span className="text-cyan-300 font-semibold uppercase">
+                {perfil?.nome || 'LANCHA'}
+              </span>{' '}
+              nas próximas 72 horas
+            </p>
           </div>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            Previsão detalhada de períodos ideais diurnos (≥70 pts) para{' '}
-            <span className="text-cyan-300 font-semibold uppercase">
-              {perfil?.nome || 'LANCHA'}
-            </span>{' '}
-            nas próximas 72 horas.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => carregarTodasJanelas(true)}
-            disabled={refreshing || loadingGeral}
-            className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-9"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-400' : ''}`}
-            />
-            <span>Recalcular Janelas</span>
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => carregarTodasJanelas(true)}
+          disabled={refreshing || loadingGeral}
+          className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-8"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-400' : ''}`} />
+          <span className="hidden sm:inline">Recalcular</span>
+        </Button>
       </div>
 
       {/* Seletor Rápido de Ponto (Filtro) */}

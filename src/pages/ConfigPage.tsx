@@ -68,6 +68,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react'
+import { TopBar } from '@/components/TopBar'
 
 export const ConfigPage: React.FC = () => {
   const navigate = useNavigate()
@@ -461,32 +462,44 @@ export const ConfigPage: React.FC = () => {
 
   return (
     <div
-      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      style={{
+        paddingTop: 'calc(3.25rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+      }}
       className="min-h-screen bg-[#0a0e14] text-zinc-100 flex flex-col justify-between selection:bg-cyan-900 selection:text-cyan-100"
     >
+      <TopBar
+        ultimaAtualizacao={new Date()}
+        onRefresh={() => {
+          reloadPontos()
+          if (reload) reload()
+        }}
+        isRefreshing={loading}
+      />
+
       <div className="w-full max-w-3xl mx-auto px-4 py-4 sm:py-6 flex-1 flex flex-col">
         {/* Header da Página */}
-        <header className="mb-6 flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+        <header className="mb-6 flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-3">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/')}
-              className="text-zinc-400 hover:text-white p-2 h-auto"
+              className="text-zinc-400 hover:text-white p-1.5 h-auto"
               title="Voltar ao início"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-700/60 flex items-center justify-center text-cyan-300">
-                  <Settings className="w-4 h-4" />
+                <div className="w-7 h-7 rounded-lg bg-cyan-950 border border-cyan-700/60 flex items-center justify-center text-cyan-300">
+                  <Settings className="w-3.5 h-3.5" />
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                   Configurações
                 </h1>
               </div>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+              <p className="text-xs text-zinc-400 mt-0.5">
                 Preferências da embarcação, ancoradouros e limites de navegabilidade
               </p>
             </div>

@@ -15,6 +15,7 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft, AlertTriangle, RefreshCw } from 'lucide-react'
+import { TopBar } from '@/components/TopBar'
 
 export const PontoDetalhePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -193,35 +194,29 @@ export const PontoDetalhePage: React.FC = () => {
 
   return (
     <div
-      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
-      className="space-y-4"
+      style={{
+        paddingTop: 'calc(3.25rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+      }}
+      className="max-w-4xl mx-auto px-4 py-4 space-y-4"
     >
+      <TopBar
+        ultimaAtualizacao={new Date()}
+        onRefresh={() => carregarDados(true)}
+        isRefreshing={refreshing}
+      />
+
       {/* Botão Superior de Voltar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate('/')}
-          className="text-zinc-400 hover:text-white gap-2 p-0 h-auto font-medium"
+          className="text-zinc-400 hover:text-white gap-2 p-0 h-auto font-medium text-xs"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Voltar para todos os pontos</span>
         </Button>
-
-        {ponto && !loading && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => carregarDados(true)}
-            disabled={refreshing}
-            className="bg-[#161c24] border-zinc-700 hover:border-cyan-600 hover:bg-cyan-950/40 text-zinc-300 text-xs gap-1.5 h-8"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-400' : ''}`}
-            />
-            <span className="hidden sm:inline">Atualizar</span>
-          </Button>
-        )}
       </div>
 
       {loading && <LoadingState variant="cards" count={3} />}

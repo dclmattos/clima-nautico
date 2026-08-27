@@ -3,7 +3,6 @@ import { usePerfil } from '@/contexts/PerfilContext'
 import {
   fetchPontos,
   fetchCalculoTravessia,
-  fetchNarrativaTravessia,
   enviarBriefingEmail,
   PONTOS_DISPONIVEIS,
   getWindDirectionLabel,
@@ -61,6 +60,7 @@ import {
   Sunset,
   RefreshCw,
 } from 'lucide-react'
+import { TopBar } from '@/components/TopBar'
 
 // Pega a próxima hora cheia formatada para o input datetime-local no fuso America/Sao_Paulo: YYYY-MM-DDTHH:00
 function getProximaHoraCheiaIso(): string {
@@ -197,10 +197,6 @@ export default function TravessiaPage() {
   const [calculando, setCalculando] = useState(false)
   const [resultado, setResultado] = useState<TravessiaResultado | null>(null)
 
-  // Estados de Narrativa IA
-  const [analisandoNarrativa, setAnalisandoNarrativa] = useState(false)
-  const [narrativaTexto, setNarrativaTexto] = useState<string | null>(null)
-
   // Estado do Modal de E-mail para compartilhamento
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
   const [destinatarioEmail, setDestinatarioEmail] = useState('')
@@ -317,7 +313,6 @@ export default function TravessiaPage() {
       }
 
       setCalculando(true)
-      setNarrativaTexto(null)
 
       const rawHora = horaParaCalcular || horaSaida || getProximaHoraCheiaIso()
       const targetHoraComOffset = toSaoPauloIsoWithOffset(rawHora)
@@ -370,33 +365,6 @@ export default function TravessiaPage() {
     ],
   )
 
-  // Dispara narrativa de IA
-  const handleExplicarComandante = async () => {
-    if (!resultado) return
-    setAnalisandoNarrativa(true)
-
-    try {
-      const res = await fetchNarrativaTravessia(resultado, deviceId)
-      if (res.bloqueado) {
-        toast({
-          title: 'Limite diário atingido',
-          description: 'Limite diário de análises atingido (10/dia). Volte amanhã!',
-          variant: 'destructive',
-        })
-      } else if (res.narrativa) {
-        setNarrativaTexto(res.narrativa)
-      }
-    } catch (err: any) {
-      toast({
-        title: 'Análise indisponível',
-        description: err?.message || 'Não foi possível sintetizar a travessia no momento.',
-        variant: 'destructive',
-      })
-    } finally {
-      setAnalisandoNarrativa(false)
-    }
-  }
-
   // Aplica a melhor alternativa recomendada
   const handleUsarAlternativa = () => {
     if (!resultado?.melhor_alternativa) return
@@ -435,9 +403,6 @@ export default function TravessiaPage() {
     }
     if (resultado.melhor_alternativa) {
       txt += `💡 Melhor saída: ${formatarHoraCurta(resultado.melhor_alternativa.hora_saida)}h (${resultado.melhor_alternativa.veredito.toUpperCase()})\n`
-    }
-    if (narrativaTexto) {
-      txt += `\n🎖️ *Parecer do Comandante:*\n"${narrativaTexto}"\n`
     }
     txt += `\nGerado no Clima Náutico · Baía de Ilha Grande`
     return txt
@@ -542,17 +507,26 @@ export default function TravessiaPage() {
 
   return (
     <div
-      style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
-      className="max-w-4xl mx-auto px-4 py-6 space-y-6 text-zinc-100"
+      style={{
+        paddingTop: 'calc(3.25rem + env(safe-area-inset-top, 0px))',
+        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+      }}
+      className="max-w-4xl mx-auto px-4 py-4 space-y-6 text-zinc-100"
     >
+      <TopBar
+        ultimaAtualizacao={new Date()}
+        onRefresh={() => handleCalcular()}
+        isRefreshing={calculando}
+      />
+
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 shadow-md">
-            <Navigation className="w-6 h-6" />
+          <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 shadow-md">
+            <Navigation className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               Planejador de Travessia
             </h1>
             <p className="text-xs text-zinc-400">
@@ -788,21 +762,8 @@ export default function TravessiaPage() {
                   </div>
                 </div>
 
-                {/* Botões de Ação: Compartilhar & Explicar */}
+                {/* Botões de Ação: Compartilhar */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExplicarComandante}
-                    disabled={analisandoNarrativa}
-                    className="bg-[#141b25] border-cyan-800 text-cyan-300 hover:bg-cyan-950 text-xs gap-1.5 h-8 shadow-sm"
-                  >
-                    <Sparkles
-                      className={`w-3.5 h-3.5 ${analisandoNarrativa ? 'animate-spin' : 'text-cyan-400'}`}
-                    />
-                    {analisandoNarrativa ? 'Analisando...' : 'Explicar com IA'}
-                  </Button>
-
                   {/* Dropdown Compartilhar */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -926,37 +887,6 @@ export default function TravessiaPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* PARECER DO COMANDANTE (IA) */}
-          {narrativaTexto && (
-            <Card className="bg-[#0c1219] border-cyan-900/50 shadow-xl overflow-hidden animate-in fade-in-50">
-              <CardHeader className="py-2.5 px-4 bg-[#0e1620] border-b border-zinc-800 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2 text-cyan-400">
-                  <span className="text-base">🎖️</span>
-                  <CardTitle className="text-xs font-bold uppercase tracking-wider text-cyan-300">
-                    Parecer do Comandante
-                  </CardTitle>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleExplicarComandante}
-                  disabled={analisandoNarrativa}
-                  className="h-6 text-[11px] text-zinc-400 hover:text-white px-2"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 mr-1 ${analisandoNarrativa ? 'animate-spin' : ''}`}
-                  />
-                  Regerar
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4">
-                <p className="text-xs sm:text-sm text-zinc-200 italic leading-relaxed whitespace-pre-line font-sans border-l-2 border-cyan-600/60 pl-3">
-                  {narrativaTexto}
-                </p>
-              </CardContent>
-            </Card>
-          )}
 
           {/* BLOCO MELHOR ALTERNATIVA */}
           {resultado.melhor_alternativa ? (
