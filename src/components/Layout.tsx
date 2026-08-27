@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, CalendarRange, Settings } from 'lucide-react'
+import { Home, CalendarRange, Navigation, Settings } from 'lucide-react'
 
 export default function Layout() {
   const location = useLocation()
@@ -18,8 +18,14 @@ export default function Layout() {
       exact: false,
     },
     {
+      to: '/travessia',
+      label: 'Travessia',
+      icon: Navigation,
+      exact: false,
+    },
+    {
       to: '/config',
-      label: 'Config',
+      label: 'Configurações',
       icon: Settings,
       exact: false,
     },
@@ -41,7 +47,7 @@ export default function Layout() {
 
       {/* Barra de Navegação Inferior Fixa (Mobile e Desktop) */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0d1218]/95 backdrop-blur-md border-t border-zinc-800/80 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
-        <div className="max-w-md mx-auto px-6 py-2 flex items-center justify-around">
+        <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-around">
           {navItems.map((item) => {
             const active = isActive(item.to, item.exact)
             const Icon = item.icon

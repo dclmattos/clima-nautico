@@ -299,6 +299,103 @@ export async function enviarBriefingEmail(
 }
 
 /**
+ * Consulta cálculo e previsão para travessia entre dois pontos
+ */
+export async function fetchCalculoTravessia(
+  params: import('@/types/nautico').TravessiaParams,
+): Promise<import('@/types/nautico').TravessiaResultado> {
+  const backendUrl = pb.baseUrl || ''
+  const queryParams = new URLSearchParams()
+
+  queryParams.set('origem', params.origem)
+  queryParams.set('destino', params.destino)
+  queryParams.set('hora_saida', params.hora_saida)
+  if (params.velocidade_nos) {
+    queryParams.set('velocidade_nos', String(params.velocidade_nos))
+  }
+  if (params.perfil_id) {
+    queryParams.set('perfil_id', params.perfil_id)
+  }
+  if (params.consumo_lh !== undefined && params.consumo_lh !== null && params.consumo_lh > 0) {
+    queryParams.set('consumo_lh', String(params.consumo_lh))
+  }
+  if (params.dispositivo_uuid) {
+    queryParams.set('dispositivo_uuid', params.dispositivo_uuid)
+  }
+
+  const url = `${backendUrl}/backend/v1/travessia?${queryParams.toString()}`
+
+  const res = await fetch(url, {
+    headers: {
+      ...(params.dispositivo_uuid ? { 'X-Device-Id': params.dispositivo_uuid } : {}),
+    },
+  })
+
+  if (!res.ok) {
+    let errorDetail = 'Não foi possível calcular a travessia'
+    try {
+      const errJson = await res.json()
+      if (errJson?.error) {
+        errorDetail = errJson.error
+      }
+    } catch {
+      errorDetail = `Erro no servidor (${res.status})`
+    }
+    throw new Error(errorDetail)
+  }
+
+  const data: import('@/types/nautico').TravessiaResultado = await res.json()
+  return data
+}
+
+/**
+ * Solicita narrativa do comandante para a travessia com IA
+ */
+export async function fetchNarrativaTravessia(
+  resultado: import('@/types/nautico').TravessiaResultado,
+  dispositivoUuid?: string,
+): Promise<{ narrativa: string; requisicoes_restantes?: number; bloqueado?: boolean }> {
+  const backendUrl = pb.baseUrl || ''
+  const url = `${backendUrl}/backend/v1/narrativa-travessia`
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (dispositivoUuid) {
+    headers['X-Device-Id'] = dispositivoUuid
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ resultado }),
+  })
+
+  if (res.status === 429) {
+    return {
+      narrativa: '',
+      bloqueado: true,
+    }
+  }
+
+  if (!res.ok) {
+    let errorDetail = 'Não foi possível obter a narrativa do comandante'
+    try {
+      const errJson = await res.json()
+      if (errJson?.error) {
+        errorDetail = errJson.error
+      }
+    } catch {
+      errorDetail = `Erro no servidor (${res.status})`
+    }
+    throw new Error(errorDetail)
+  }
+
+  const data = await res.json()
+  return data
+}
+
+/**
  * Encontra a próxima janela disponível (no futuro ou em andamento)
  */
 export function getProximaJanela(

@@ -104,6 +104,72 @@ export interface RotaPonto {
   direcao_cardinal: string
 }
 
+export type DirecaoRelativaVento = 'proa' | 'través' | 'popa'
+
+export interface TravessiaAmostra {
+  tipo: 'origem' | 'meio' | 'destino'
+  ponto_nome?: string
+  horario: string
+  vento_nos: number
+  rajada_nos: number
+  direcao_vento: number
+  direcao_relativa: DirecaoRelativaVento
+  altura_onda_m: number
+  periodo_onda_s: number
+  score: number
+  chuva_mmh: number
+  rebaixada?: boolean
+  motivo_rebaixamento?: string | null
+  fator_limitante?: string | null
+}
+
+export interface TravessiaAlternativa {
+  hora_saida: string
+  eta: string
+  veredito: 'verde' | 'amarelo' | 'vermelho'
+  veredito_cor: string
+  score_minimo: number
+  fator_limitante: string
+}
+
+export interface TravessiaPontoInfo {
+  slug: string
+  nome: string
+  lat: number
+  lon: number
+  tipo?: TipoPonto
+}
+
+export interface TravessiaResultado {
+  origem: TravessiaPontoInfo
+  destino: TravessiaPontoInfo
+  distancia_nm: number
+  rumo_verdadeiro: number
+  duracao_horas: number
+  hora_saida?: string
+  eta: string
+  velocidade_nos?: number
+  veredito: 'verde' | 'amarelo' | 'vermelho'
+  veredito_cor: string
+  aviso: string | null
+  amostras: TravessiaAmostra[]
+  combustivel_litros: number | null
+  combustivel_com_reserva: number | null
+  melhor_alternativa: TravessiaAlternativa | null
+  hora_limite_saida: string | null
+  narrativa_bloqueada?: boolean
+}
+
+export interface TravessiaParams {
+  origem: string
+  destino: string
+  hora_saida: string
+  velocidade_nos?: number
+  perfil_id?: string
+  consumo_lh?: number
+  dispositivo_uuid?: string
+}
+
 export interface PrevisaoPayload {
   ponto_id: string
   ponto_nome: string
