@@ -56,13 +56,34 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     }
   }
 
+  const getFatorAbrigo = (tipo) => {
+    const t = (tipo || '').trim().toLowerCase()
+    if (t === 'abrigado') return 0.4
+    if (t === 'semi' || t === 'semi-abrigado' || t === 'semi_abrigado') return 0.7
+    return 1.0 // mar_aberto
+  }
+
   // Helper para resolver um ponto (slug ou custom:lat:lon ou lat,lon)
   const PONTOS_FIXOS_LIST = [
     { slug: 'angra', nome: 'Angra dos Reis', lat: -23.0067, lon: -44.318, tipo: 'abrigado' },
-    { slug: 'abraao', nome: 'Abraão (Ilha Grande)', lat: -23.1415, lon: -44.1676, tipo: 'semi' },
+    {
+      slug: 'abraao',
+      nome: 'Abraão (Ilha Grande)',
+      lat: -23.1415,
+      lon: -44.1676,
+      tipo: 'semi-abrigado',
+    },
     { slug: 'paraty', nome: 'Paraty', lat: -23.2178, lon: -44.7131, tipo: 'abrigado' },
-    { slug: 'juatinga', nome: 'Juatinga', lat: -23.2833, lon: -44.5833, tipo: 'aberto' },
+    { slug: 'juatinga', nome: 'Juatinga', lat: -23.2833, lon: -44.5833, tipo: 'mar_aberto' },
   ]
+
+  const normalizarTipoString = (tipo) => {
+    const raw = (tipo || '').trim().toLowerCase()
+    if (raw === 'semi' || raw === 'semi-abrigado' || raw === 'semi_abrigado') return 'semi-abrigado'
+    if (raw === 'aberto' || raw === 'mar aberto' || raw === 'mar-aberto' || raw === 'mar_aberto')
+      return 'mar_aberto'
+    return 'abrigado'
+  }
 
   const resolvePonto = (param, defaultNome) => {
     const pStr = (param || '').trim()
@@ -71,14 +92,14 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       if (parts.length >= 3) {
         const pLat = parseFloat(parts[1])
         const pLon = parseFloat(parts[2])
-        const pTipo = parts[3] ? parts[3].toLowerCase() : 'abrigado'
+        const pTipo = parts[3] ? normalizarTipoString(parts[3]) : 'abrigado'
         if (!isNaN(pLat) && !isNaN(pLon)) {
           return {
             slug: 'custom:' + pLat.toFixed(3) + ':' + pLon.toFixed(3),
             nome: defaultNome || 'Ponto Personalizado',
             lat: pLat,
             lon: pLon,
-            tipo: pTipo === 'semi' || pTipo === 'aberto' ? pTipo : 'abrigado',
+            tipo: pTipo,
           }
         }
       }
@@ -104,7 +125,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
         nome: rec.get('nome'),
         lat: Number(rec.get('lat')),
         lon: Number(rec.get('lon')),
-        tipo: rec.get('tipo') || 'abrigado',
+        tipo: normalizarTipoString(rec.get('tipo')),
       }
     } catch (_) {
       try {
@@ -114,7 +135,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
           nome: rec.get('nome'),
           lat: Number(rec.get('lat')),
           lon: Number(rec.get('lon')),
-          tipo: rec.get('tipo') || 'abrigado',
+          tipo: normalizarTipoString(rec.get('tipo')),
         }
       } catch (_2) {
         try {
@@ -124,7 +145,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
             nome: rec.get('nome'),
             lat: Number(rec.get('lat')),
             lon: Number(rec.get('lon')),
-            tipo: rec.get('tipo') || 'abrigado',
+            tipo: normalizarTipoString(rec.get('tipo')),
           }
         } catch (_3) {}
       }
@@ -230,7 +251,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     nome: 'Ponto Médio',
     lat: meioLat,
     lon: meioLon,
-    tipo: 'semi',
+    tipo: 'semi-abrigado',
   }
 
   // Helper para obter dados de previsão com Cache UPSERT 30min
@@ -271,7 +292,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       encodeURIComponent(pt.lat) +
       '&longitude=' +
       encodeURIComponent(pt.lon) +
-      '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
+      '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
       '&timezone=America%2FSao_Paulo&forecast_days=7'
 
     let wRes
@@ -301,10 +322,25 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const mTimes = mData && mData.hourly ? mData.hourly.time || [] : []
     const mWaveHeight = mData && mData.hourly ? mData.hourly.wave_height || [] : []
     const mWavePeriod = mData && mData.hourly ? mData.hourly.wave_period || [] : []
+    const mSwellWaveHeight = mData && mData.hourly ? mData.hourly.swell_wave_height || [] : []
+
+    const fatorAbrigoPt = getFatorAbrigo(pt.tipo)
+    const isWaveAjustado = fatorAbrigoPt < 1.0
+
     const marineMap = {}
     for (let i = 0; i < mTimes.length; i++) {
+      const rawW = mWaveHeight[i] !== undefined ? mWaveHeight[i] : null
+      const rawS = mSwellWaveHeight[i] !== undefined ? mSwellWaveHeight[i] : null
+      const adjW = rawW !== null ? Math.round(rawW * fatorAbrigoPt * 100) / 100 : null
+      const adjS = rawS !== null ? Math.round(rawS * fatorAbrigoPt * 100) / 100 : null
+
       marineMap[mTimes[i]] = {
-        wave_height: mWaveHeight[i] !== undefined ? mWaveHeight[i] : null,
+        wave_height_bruto: rawW,
+        wave_height: adjW,
+        wave_ajustado: isWaveAjustado,
+        fator_abrigo: fatorAbrigoPt,
+        swell_wave_height_bruto: rawS,
+        swell_wave_height: adjS,
         wave_period: mWavePeriod[i] !== undefined ? mWavePeriod[i] : null,
       }
     }
@@ -318,14 +354,27 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const merged = []
     for (let i = 0; i < wTimes.length; i++) {
       const t = wTimes[i]
-      const mItem = marineMap[t] || { wave_height: null, wave_period: null }
+      const mItem = marineMap[t] || {
+        wave_height_bruto: null,
+        wave_height: null,
+        wave_ajustado: isWaveAjustado,
+        fator_abrigo: fatorAbrigoPt,
+        swell_wave_height_bruto: null,
+        swell_wave_height: null,
+        wave_period: null,
+      }
       merged.push({
         time: t,
         wind_speed_10m: wWindSpeed[i] !== undefined ? wWindSpeed[i] : null,
         wind_direction_10m: wWindDir[i] !== undefined ? wWindDir[i] : null,
         wind_gusts_10m: wWindGusts[i] !== undefined ? wWindGusts[i] : null,
         precipitation: wPrecipitation[i] !== undefined ? wPrecipitation[i] : null,
+        wave_height_bruto: mItem.wave_height_bruto,
         wave_height: mItem.wave_height,
+        wave_ajustado: mItem.wave_ajustado,
+        fator_abrigo: mItem.fator_abrigo,
+        swell_wave_height_bruto: mItem.swell_wave_height_bruto,
+        swell_wave_height: mItem.swell_wave_height,
         wave_period: mItem.wave_period,
       })
     }
@@ -430,8 +479,8 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const precipitation = item.precipitation !== null ? item.precipitation : 0
 
     let exposicaoDeducao = 0
-    if (pontoTipo === 'semi') exposicaoDeducao = 10
-    else if (pontoTipo === 'aberto') exposicaoDeducao = 20
+    if (pontoTipo === 'semi' || pontoTipo === 'semi-abrigado') exposicaoDeducao = 10
+    else if (pontoTipo === 'aberto' || pontoTipo === 'mar_aberto') exposicaoDeducao = 20
 
     let penalidadeVento = 0
     let penalidadeRajada = 0
@@ -562,6 +611,11 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       direcao_vento: windDir,
       direcao_relativa: dirRel,
       altura_onda_m: waveH,
+      altura_onda_bruto_m:
+        hData?.wave_height_bruto !== null && hData?.wave_height_bruto !== undefined
+          ? Math.round(hData.wave_height_bruto * 10) / 10
+          : waveH,
+      wave_ajustado: !!hData?.wave_ajustado,
       periodo_onda_s: waveP,
       score: score,
       chuva_mmh: rainMm,
@@ -802,9 +856,31 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   let bestRank = principalRank
   let bestMinScore = principalMinScore
 
-  // Varre saídas de hora em hora nas próximas 24h (hStep = 1 a 24, excluindo a hora original hStep=0)
-  for (let hStep = 1; hStep <= 24; hStep++) {
-    const candSaidaMs = horaSaidaMs + hStep * 3600 * 1000
+  // Regra 3: A varredura de alternativas deve considerar APENAS saídas posteriores à hora atual
+  // em America/Sao_Paulo (-03:00), a partir da PRÓXIMA hora cheia.
+  // Ex: se agora são 14:35 BRT, a primeira saída candidata é 15:00.
+  // O intervalo máximo continua sendo 24h a partir de agora.
+  const currentNowMs = Date.now()
+  // Próxima hora cheia calculada em America/Sao_Paulo
+  // Horário local em ms (UTC + offset -03:00)
+  const localNowMs = currentNowMs + SAO_PAULO_OFFSET_MINUTES * 60 * 1000
+  const localDate = new Date(localNowMs)
+  const localMinutes = localDate.getUTCMinutes()
+  const localSeconds = localDate.getUTCSeconds()
+  const localMsRemaining = (60 - localMinutes) * 60 * 1000 - localSeconds * 1000
+
+  // Se já está exatamente no minuto 0 segundo 0, soma 1 hora para ser estritamente posterior
+  const msToNextHour = localMsRemaining <= 0 ? 3600 * 1000 : localMsRemaining
+  const firstCandidateMs = currentNowMs + msToNextHour
+  const maxSearchHorizonMs = currentNowMs + 24 * 3600 * 1000
+
+  for (let candMs = firstCandidateMs; candMs <= maxSearchHorizonMs; candMs += 3600 * 1000) {
+    // Pula se coincidir exatamente com a saída original (em ms ou ISO)
+    if (Math.abs(candMs - horaSaidaMs) < 60000) {
+      continue
+    }
+
+    const candSaidaMs = candMs
     const candMeioMs = candSaidaMs + duracaoMs / 2
     const candEtaMs = candSaidaMs + duracaoMs
 

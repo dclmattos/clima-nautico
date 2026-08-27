@@ -437,6 +437,16 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                       const temp =
                         item.temperature_2m !== null ? Math.round(item.temperature_2m) : '--'
 
+                      const isAjustado = !!item.wave_ajustado
+                      const ondaBruta =
+                        item.wave_height_bruto !== null && item.wave_height_bruto !== undefined
+                          ? item.wave_height_bruto.toFixed(1)
+                          : onda
+                      const fatorTxt = item.fator_abrigo ? `×${item.fator_abrigo}` : '×0,4'
+                      const tooltipOnda = isAjustado
+                        ? `Onda ajustada pelo fator de abrigo (${fatorTxt}). Valor bruto original: ${ondaBruta} m`
+                        : `Onda em mar aberto: ${onda} m`
+
                       return (
                         <tr
                           key={idx}
@@ -460,7 +470,20 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             />
                             {dirLabel}
                           </td>
-                          <td className="p-3 text-cyan-300 font-bold">{onda}</td>
+                          <td className="p-3 text-cyan-300 font-bold" title={tooltipOnda}>
+                            <span className="inline-flex items-center gap-1">
+                              <span>{onda}</span>
+                              {isAjustado && (
+                                <span
+                                  className="text-[10px] text-zinc-500 font-normal font-sans"
+                                  title={tooltipOnda}
+                                  aria-label={tooltipOnda}
+                                >
+                                  ajust.
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="p-3 text-zinc-400">{per}</td>
                           <td className="p-3 text-indigo-300">{mare}</td>
                           <td className="p-3 text-zinc-400">{chuva}</td>

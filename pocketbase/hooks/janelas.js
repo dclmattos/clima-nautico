@@ -48,10 +48,15 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     pontoNome = (nomeParam || '').trim() || 'Ponto Personalizado'
 
     const rawTipo = (tipoParam || '').trim().toLowerCase()
-    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado') {
-      pontoTipo = 'semi'
-    } else if (rawTipo === 'aberto' || rawTipo === 'mar aberto' || rawTipo === 'mar-aberto') {
-      pontoTipo = 'aberto'
+    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado' || rawTipo === 'semi_abrigado') {
+      pontoTipo = 'semi-abrigado'
+    } else if (
+      rawTipo === 'aberto' ||
+      rawTipo === 'mar aberto' ||
+      rawTipo === 'mar-aberto' ||
+      rawTipo === 'mar_aberto'
+    ) {
+      pontoTipo = 'mar_aberto'
     } else {
       pontoTipo = 'abrigado'
     }
@@ -75,7 +80,23 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     pontoNome = ponto.get('nome')
     lat = ponto.get('lat')
     lon = ponto.get('lon')
-    pontoTipo = ponto.get('tipo') || 'abrigado'
+    const rawPontoTipo = (ponto.get('tipo') || 'abrigado').trim().toLowerCase()
+    if (
+      rawPontoTipo === 'semi' ||
+      rawPontoTipo === 'semi-abrigado' ||
+      rawPontoTipo === 'semi_abrigado'
+    ) {
+      pontoTipo = 'semi-abrigado'
+    } else if (
+      rawPontoTipo === 'aberto' ||
+      rawPontoTipo === 'mar aberto' ||
+      rawPontoTipo === 'mar-aberto' ||
+      rawPontoTipo === 'mar_aberto'
+    ) {
+      pontoTipo = 'mar_aberto'
+    } else {
+      pontoTipo = 'abrigado'
+    }
   } else {
     return e.json(400, { error: "Informe 'ponto_id' ou as coordenadas 'lat', 'lon' e 'tipo'" })
   }
@@ -128,7 +149,7 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
+    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
     '&timezone=America%2FSao_Paulo&forecast_days=3'
 
   let weatherRes
@@ -199,32 +220,52 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
 
   // Mapeamento diário de sunrise e sunset por data (YYYY-MM-DD)
   const sunMap = {}
+  const dailySunInfo = []
   if (weatherData.daily && weatherData.daily.time) {
     const dTimes = weatherData.daily.time
     const dSunrises = weatherData.daily.sunrise || []
     const dSunsets = weatherData.daily.sunset || []
     for (let i = 0; i < dTimes.length; i++) {
       const dayKey = dTimes[i]
+      const sRise = dSunrises[i] || null
+      const sSet = dSunsets[i] || null
       sunMap[dayKey] = {
-        sunrise: dSunrises[i] ? new Date(dSunrises[i]).getTime() : null,
-        sunset: dSunsets[i] ? new Date(dSunsets[i]).getTime() : null,
+        sunriseIso: sRise,
+        sunsetIso: sSet,
+        sunrise: sRise ? new Date(sRise).getTime() : null,
+        sunset: sSet ? new Date(sSet).getTime() : null,
       }
+      dailySunInfo.push({
+        date: dayKey,
+        nascer_sol: sRise,
+        por_sol: sSet,
+      })
     }
   }
 
-  // Helper para verificar período diurno
+  // Helper para verificar período diurno real baseado em nascer_sol e por_sol de cada dia
   const isDaylightHour = (timeIso) => {
     const hourTime = new Date(timeIso).getTime()
     const dayKey = timeIso.slice(0, 10)
     const daySun = sunMap[dayKey]
     if (daySun && daySun.sunrise && daySun.sunset) {
-      return (
-        hourTime >= daySun.sunrise - 30 * 60 * 1000 && hourTime <= daySun.sunset + 30 * 60 * 1000
-      )
+      return hourTime >= daySun.sunrise && hourTime <= daySun.sunset
     }
     const hour = new Date(timeIso).getHours()
     return hour >= 6 && hour < 18
   }
+
+  // Fator de abrigo conforme o tipo do ponto:
+  // abrigado -> 0.4, semi-abrigado -> 0.7, mar_aberto -> 1.0
+  let fatorAbrigo = 1.0
+  if (pontoTipo === 'abrigado') {
+    fatorAbrigo = 0.4
+  } else if (pontoTipo === 'semi-abrigado' || pontoTipo === 'semi') {
+    fatorAbrigo = 0.7
+  } else {
+    fatorAbrigo = 1.0
+  }
+  const isWaveAjustado = fatorAbrigo < 1.0
 
   // Map de dados marítimos por hora (time)
   const marineMap = {}
@@ -234,6 +275,7 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
     const mWavePeriod = marineData.hourly.wave_period || []
     const mSeaLevel = marineData.hourly.sea_level_height_msl || []
     const mSeaSurfaceTemp = marineData.hourly.sea_surface_temperature || []
+    const mSwellWaveHeight = marineData.hourly.swell_wave_height || []
     const mSwellWaveDir = marineData.hourly.swell_wave_direction || []
     const mSwellWavePeriod = marineData.hourly.swell_wave_period || []
     const mWindWaveHeight = marineData.hourly.wind_wave_height || []
@@ -242,11 +284,22 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
 
     for (let i = 0; i < mTimes.length; i++) {
       const t = mTimes[i]
+      const rawWaveH = mWaveHeight[i] !== undefined ? mWaveHeight[i] : null
+      const rawSwellH = mSwellWaveHeight[i] !== undefined ? mSwellWaveHeight[i] : null
+
+      const adjWaveH = rawWaveH !== null ? Math.round(rawWaveH * fatorAbrigo * 100) / 100 : null
+      const adjSwellH = rawSwellH !== null ? Math.round(rawSwellH * fatorAbrigo * 100) / 100 : null
+
       marineMap[t] = {
-        wave_height: mWaveHeight[i] !== undefined ? mWaveHeight[i] : null,
+        wave_height_bruto: rawWaveH,
+        wave_height: adjWaveH,
+        wave_ajustado: isWaveAjustado,
+        fator_abrigo: fatorAbrigo,
         wave_period: mWavePeriod[i] !== undefined ? mWavePeriod[i] : null,
         sea_level_height_msl: mSeaLevel[i] !== undefined ? mSeaLevel[i] : null,
         sea_surface_temperature: mSeaSurfaceTemp[i] !== undefined ? mSeaSurfaceTemp[i] : null,
+        swell_wave_height_bruto: rawSwellH,
+        swell_wave_height: adjSwellH,
         swell_wave_direction: mSwellWaveDir[i] !== undefined ? mSwellWaveDir[i] : null,
         swell_wave_period: mSwellWavePeriod[i] !== undefined ? mSwellWavePeriod[i] : null,
         wind_wave_height: mWindWaveHeight[i] !== undefined ? mWindWaveHeight[i] : null,
@@ -270,9 +323,9 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
 
   // Dedução de exposição: abrigado = 0, semi = -10, aberto = -20
   let exposicaoDeducao = 0
-  if (pontoTipo === 'semi') {
+  if (pontoTipo === 'semi' || pontoTipo === 'semi-abrigado') {
     exposicaoDeducao = 10
-  } else if (pontoTipo === 'aberto') {
+  } else if (pontoTipo === 'aberto' || pontoTipo === 'mar_aberto') {
     exposicaoDeducao = 20
   }
 
@@ -281,10 +334,15 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
   for (let i = 0; i < wTimes.length; i++) {
     const t = wTimes[i]
     const mData = marineMap[t] || {
+      wave_height_bruto: null,
       wave_height: null,
+      wave_ajustado: isWaveAjustado,
+      fator_abrigo: fatorAbrigo,
       wave_period: null,
       sea_level_height_msl: null,
       sea_surface_temperature: null,
+      swell_wave_height_bruto: null,
+      swell_wave_height: null,
       swell_wave_direction: null,
       swell_wave_period: null,
       wind_wave_height: null,
@@ -415,10 +473,15 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
       surface_pressure: wPressure[i] !== undefined ? wPressure[i] : null,
       cloud_cover: wCloudCover[i] !== undefined ? wCloudCover[i] : null,
       uv_index: wUvIndex[i] !== undefined ? wUvIndex[i] : null,
+      wave_height_bruto: mData.wave_height_bruto,
       wave_height: waveHeight,
+      wave_ajustado: isWaveAjustado,
+      fator_abrigo: fatorAbrigo,
       wave_period: wavePeriod,
       sea_level_height_msl: seaLevel,
       sea_surface_temperature: mData.sea_surface_temperature,
+      swell_wave_height_bruto: mData.swell_wave_height_bruto,
+      swell_wave_height: mData.swell_wave_height,
       swell_wave_direction: mData.swell_wave_direction,
       swell_wave_period: mData.swell_wave_period,
       wind_wave_height: mData.wind_wave_height,
@@ -468,13 +531,19 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
         }
       }
 
+      const inicioIso = currentJanela[0].time
+      const fimIso = currentJanela[currentJanela.length - 1].time
+      const duracaoHorasReal =
+        Math.round((new Date(fimIso).getTime() - new Date(inicioIso).getTime()) / (3600 * 1000)) + 1
+
       janelas.push({
-        inicio: currentJanela[0].time,
-        fim: currentJanela[currentJanela.length - 1].time,
-        duracao_horas: currentJanela.length,
+        inicio: inicioIso,
+        fim: fimIso,
+        duracao_horas: duracaoHorasReal,
         score_medio: Math.round(somaScores / currentJanela.length),
         fator_limitante: maisFrequente,
         fator_limitante_desc: limitanteDesc,
+        melhor_janela: false,
       })
     }
     currentJanela = []
@@ -493,12 +562,27 @@ routerAdd('GET', '/backend/v1/janelas', (e) => {
 
   finalizeJanela()
 
+  // Define melhor_janela: true APENAS na janela de maior score_medio do ponto.
+  // Em empate, a primeira (mais cedo) leva o selo.
+  if (janelas.length > 0) {
+    let maxScoreMedio = -1
+    let bestIdx = 0
+    for (let j = 0; j < janelas.length; j++) {
+      if (janelas[j].score_medio > maxScoreMedio) {
+        maxScoreMedio = janelas[j].score_medio
+        bestIdx = j
+      }
+    }
+    janelas[bestIdx].melhor_janela = true
+  }
+
   const resultPayload = {
     ponto_id: realPontoId,
     ponto_nome: pontoNome,
     ponto_tipo: pontoTipo,
     perfil_id: realPerfilId,
     perfil_nome: perfilNome,
+    dias_sol: dailySunInfo,
     hourly_scores: hourlyScores,
     janelas: janelas,
   }

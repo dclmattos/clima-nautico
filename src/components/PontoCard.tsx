@@ -119,18 +119,18 @@ export const PontoCard: React.FC<PontoCardProps> = ({ estado, onRetry }) => {
     }
   }
 
-  // Cor do anel de score circular
+  // Cor do anel de score circular (verde ≥ 70, amarelo 50-69, vermelho < 50)
   const getScoreColorClass = (score: number | null | undefined) => {
     if (score === null || score === undefined) return 'text-zinc-500'
     if (score >= 70) return 'text-emerald-400'
-    if (score >= 40) return 'text-amber-400'
+    if (score >= 50) return 'text-amber-400'
     return 'text-red-400'
   }
 
   const getScoreStrokeColor = (score: number | null | undefined) => {
     if (score === null || score === undefined) return '#71717a'
     if (score >= 70) return '#34d399'
-    if (score >= 40) return '#fbbf24'
+    if (score >= 50) return '#fbbf24'
     return '#f87171'
   }
 

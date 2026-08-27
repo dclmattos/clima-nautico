@@ -111,7 +111,6 @@ export const Index: React.FC = () => {
         ])
 
         const currentHour = prevData?.hourly ? getCurrentHourForecast(prevData.hourly) : null
-        const semaforo = currentHour ? calculateSemaforo(currentHour) : null
 
         // Próxima janela de navegação encontrada
         const proxima = janelasData?.janelas ? getProximaJanela(janelasData.janelas) : null
@@ -124,6 +123,9 @@ export const Index: React.FC = () => {
             scoreAtual = matchedScore.score
           }
         }
+
+        // Semáforo deriva EXCLUSIVAMENTE do score do perfil ativo (verde >= 70, amarelo 50-69, vermelho < 50)
+        const semaforo = scoreAtual !== null ? calculateSemaforo(scoreAtual) : null
 
         return {
           ponto,

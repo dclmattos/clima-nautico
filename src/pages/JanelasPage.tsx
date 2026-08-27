@@ -219,23 +219,45 @@ export const JanelasPage: React.FC = () => {
       return {
         dataTitulo: `${diaNome}, ${diaNum}/${mesNum}`,
         horario: `${horaIni} às ${horaFim}`,
+        dataIso: inicioIso.slice(0, 10),
       }
     } catch {
       return {
         dataTitulo: inicioIso.slice(0, 10),
         horario: `${inicioIso.slice(11, 16)} às ${fimIso.slice(11, 16)}`,
+        dataIso: inicioIso.slice(0, 10),
       }
     }
   }
 
-  // Cor do score
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return 'text-emerald-400 bg-emerald-950/60 border-emerald-700'
-    if (score >= 70) return 'text-teal-400 bg-teal-950/60 border-teal-700'
-    if (score >= 50) return 'text-amber-400 bg-amber-950/60 border-amber-700'
-    return 'text-red-400 bg-red-950/60 border-red-700'
+  // Busca o nascer e pôr do sol formatados para uma data
+  const getSunInfoStr = (pj: PontoJanelaItem, dateIso: string) => {
+    const diasSol = pj.janelasPayload?.dias_sol || []
+    const dItem = diasSol.find((d) => d.date === dateIso)
+    if (dItem?.nascer_sol && dItem?.por_sol) {
+      try {
+        const rise = new Date(dItem.nascer_sol).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const set = new Date(dItem.por_sol).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        return `☀️ ${rise} – ${set}`
+      } catch {
+        return null
+      }
+    }
+    return null
   }
 
+  // Cor do score
+  const getScoreColor = (score: number) => {
+    if (score >= 70) return 'text-emerald-400 border-emerald-500/40 bg-emerald-950/20'
+    if (score >= 50) return 'text-amber-400 border-amber-500/40 bg-amber-950/20'
+    return 'text-red-400 border-red-500/40 bg-red-950/20'
+  }
   // Filtragem por ponto selecionado
   const pontosExibidos =
     selectedPontoId === 'todos'
@@ -442,10 +464,21 @@ export const JanelasPage: React.FC = () => {
                   {!pj.error && janelas.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {janelas.map((j, idx) => {
-                        const { dataTitulo, horario } = formatJanelaExtensa(j.inicio, j.fim)
+                        const { dataTitulo, horario, dataIso } = formatJanelaExtensa(
+                          j.inicio,
+                          j.fim,
+                        )
+                        const sunInfo = getSunInfoStr(pj, dataIso)
+                        // O selo "Melhor janela" aparece APENAS na janela de maior score_medio de cada ponto (melhor_janela: true do backend ou cálculo de maior score)
                         const isMelhor =
-                          idx === 0 ||
-                          j.score_medio === Math.max(...janelas.map((item) => item.score_medio))
+                          j.melhor_janela !== undefined
+                            ? j.melhor_janela
+                            : idx ===
+                              janelas.findIndex(
+                                (item) =>
+                                  item.score_medio ===
+                                  Math.max(...janelas.map((m) => m.score_medio)),
+                              )
 
                         return (
                           <div
@@ -468,11 +501,18 @@ export const JanelasPage: React.FC = () => {
                             {/* Informações da Janela */}
                             <div className="space-y-2">
                               <div className="space-y-0.5 pr-14">
-                                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                                  {dataTitulo}
-                                </span>
-                                <p className="text-sm font-black text-cyan-300 font-mono flex items-center gap-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                                    {dataTitulo}
+                                  </span>
+                                  {sunInfo && (
+                                    <span className="text-[10px] text-amber-300 font-mono bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40">
+                                      {sunInfo}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm font-black text-cyan-300 font-mono flex items-center gap-1.5 pt-0.5">
                                   <Sun className="w-3.5 h-3.5 text-amber-400" />
                                   {horario}
                                 </p>

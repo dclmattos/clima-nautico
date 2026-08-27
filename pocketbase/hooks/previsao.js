@@ -29,10 +29,15 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
     // Tipo
     const rawTipo = (tipoParam || '').trim().toLowerCase()
-    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado') {
-      pontoTipo = 'semi'
-    } else if (rawTipo === 'aberto' || rawTipo === 'mar aberto' || rawTipo === 'mar-aberto') {
-      pontoTipo = 'aberto'
+    if (rawTipo === 'semi' || rawTipo === 'semi-abrigado' || rawTipo === 'semi_abrigado') {
+      pontoTipo = 'semi-abrigado'
+    } else if (
+      rawTipo === 'aberto' ||
+      rawTipo === 'mar aberto' ||
+      rawTipo === 'mar-aberto' ||
+      rawTipo === 'mar_aberto'
+    ) {
+      pontoTipo = 'mar_aberto'
     } else {
       pontoTipo = 'abrigado'
     }
@@ -57,7 +62,23 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     pontoNome = ponto.get('nome')
     lat = ponto.get('lat')
     lon = ponto.get('lon')
-    pontoTipo = ponto.get('tipo') || 'abrigado'
+    const rawPontoTipo = (ponto.get('tipo') || 'abrigado').trim().toLowerCase()
+    if (
+      rawPontoTipo === 'semi' ||
+      rawPontoTipo === 'semi-abrigado' ||
+      rawPontoTipo === 'semi_abrigado'
+    ) {
+      pontoTipo = 'semi-abrigado'
+    } else if (
+      rawPontoTipo === 'aberto' ||
+      rawPontoTipo === 'mar aberto' ||
+      rawPontoTipo === 'mar-aberto' ||
+      rawPontoTipo === 'mar_aberto'
+    ) {
+      pontoTipo = 'mar_aberto'
+    } else {
+      pontoTipo = 'abrigado'
+    }
   } else {
     return e.json(400, { error: "Informe 'ponto_id' ou as coordenadas 'lat', 'lon' e 'tipo'" })
   }
@@ -95,13 +116,13 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     '&daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min' +
     '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=7'
 
-  // Marine: hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction
+  // Marine: hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction
   const marineUrl =
     'https://marine-api.open-meteo.com/v1/marine?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
+    '&hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction' +
     '&timezone=America%2FSao_Paulo&forecast_days=7'
 
   let weatherRes
@@ -171,6 +192,18 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     })
   }
 
+  // Fator de abrigo conforme o tipo do ponto:
+  // abrigado -> 0.4, semi-abrigado -> 0.7, mar_aberto -> 1.0
+  let fatorAbrigo = 1.0
+  if (pontoTipo === 'abrigado') {
+    fatorAbrigo = 0.4
+  } else if (pontoTipo === 'semi-abrigado' || pontoTipo === 'semi') {
+    fatorAbrigo = 0.7
+  } else {
+    fatorAbrigo = 1.0
+  }
+  const isWaveAjustado = fatorAbrigo < 1.0
+
   // Map de dados marítimos por hora (time)
   const marineMap = {}
   if (marineData && marineData.hourly && marineData.hourly.time) {
@@ -179,6 +212,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
     const mWavePeriod = marineData.hourly.wave_period || []
     const mSeaLevel = marineData.hourly.sea_level_height_msl || []
     const mSeaSurfaceTemp = marineData.hourly.sea_surface_temperature || []
+    const mSwellWaveHeight = marineData.hourly.swell_wave_height || []
     const mSwellWaveDir = marineData.hourly.swell_wave_direction || []
     const mSwellWavePeriod = marineData.hourly.swell_wave_period || []
     const mWindWaveHeight = marineData.hourly.wind_wave_height || []
@@ -187,11 +221,22 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
 
     for (let i = 0; i < mTimes.length; i++) {
       const t = mTimes[i]
+      const rawWaveH = mWaveHeight[i] !== undefined ? mWaveHeight[i] : null
+      const rawSwellH = mSwellWaveHeight[i] !== undefined ? mSwellWaveHeight[i] : null
+
+      const adjWaveH = rawWaveH !== null ? Math.round(rawWaveH * fatorAbrigo * 100) / 100 : null
+      const adjSwellH = rawSwellH !== null ? Math.round(rawSwellH * fatorAbrigo * 100) / 100 : null
+
       marineMap[t] = {
-        wave_height: mWaveHeight[i] !== undefined ? mWaveHeight[i] : null,
+        wave_height_bruto: rawWaveH,
+        wave_height: adjWaveH,
+        wave_ajustado: isWaveAjustado,
+        fator_abrigo: fatorAbrigo,
         wave_period: mWavePeriod[i] !== undefined ? mWavePeriod[i] : null,
         sea_level_height_msl: mSeaLevel[i] !== undefined ? mSeaLevel[i] : null,
         sea_surface_temperature: mSeaSurfaceTemp[i] !== undefined ? mSeaSurfaceTemp[i] : null,
+        swell_wave_height_bruto: rawSwellH,
+        swell_wave_height: adjSwellH,
         swell_wave_direction: mSwellWaveDir[i] !== undefined ? mSwellWaveDir[i] : null,
         swell_wave_period: mSwellWavePeriod[i] !== undefined ? mSwellWavePeriod[i] : null,
         wind_wave_height: mWindWaveHeight[i] !== undefined ? mWindWaveHeight[i] : null,
@@ -254,10 +299,15 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   for (let i = 0; i < wTimes.length; i++) {
     const t = wTimes[i]
     const mData = marineMap[t] || {
+      wave_height_bruto: null,
       wave_height: null,
+      wave_ajustado: isWaveAjustado,
+      fator_abrigo: fatorAbrigo,
       wave_period: null,
       sea_level_height_msl: null,
       sea_surface_temperature: null,
+      swell_wave_height_bruto: null,
+      swell_wave_height: null,
       swell_wave_direction: null,
       swell_wave_period: null,
       wind_wave_height: null,
@@ -281,11 +331,16 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       cloud_cover: wCloudCover[i] !== undefined ? wCloudCover[i] : null,
       uv_index: wUvIndex[i] !== undefined ? wUvIndex[i] : null,
       weather_code: wWeatherCode[i] !== undefined ? wWeatherCode[i] : null,
+      wave_height_bruto: mData.wave_height_bruto,
       wave_height: waveH,
+      wave_ajustado: isWaveAjustado,
+      fator_abrigo: fatorAbrigo,
       wave_period: mData.wave_period,
       douglas_grau: waveH !== null ? getDouglas(waveH).grau : 0,
       sea_level_height_msl: mData.sea_level_height_msl,
       sea_surface_temperature: mData.sea_surface_temperature,
+      swell_wave_height_bruto: mData.swell_wave_height_bruto,
+      swell_wave_height: mData.swell_wave_height,
       swell_wave_direction: mData.swell_wave_direction,
       swell_wave_period: mData.swell_wave_period,
       wind_wave_height: mData.wind_wave_height,
@@ -657,6 +712,12 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       temperatura_agua: currentItem.sea_surface_temperature,
       swell_direcao: currentItem.swell_wave_direction,
       swell_periodo: currentItem.swell_wave_period,
+      swell_wave_height_bruto: currentItem.swell_wave_height_bruto,
+      swell_wave_height: currentItem.swell_wave_height,
+      wave_height_bruto: currentItem.wave_height_bruto,
+      wave_height: currentItem.wave_height,
+      wave_ajustado: isWaveAjustado,
+      fator_abrigo: fatorAbrigo,
       onda_vento_altura: currentItem.wind_wave_height,
       corrente_velocidade: currentItem.ocean_current_velocity,
       corrente_direcao: currentItem.ocean_current_direction,

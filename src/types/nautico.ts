@@ -38,11 +38,16 @@ export interface PrevisaoHoraItem {
   cloud_cover: number | null
   uv_index: number | null
   weather_code?: number | null
+  wave_height_bruto?: number | null
   wave_height: number | null
+  wave_ajustado?: boolean
+  fator_abrigo?: number
   wave_period: number | null
   douglas_grau: number
   sea_level_height_msl: number | null
   sea_surface_temperature: number | null
+  swell_wave_height_bruto?: number | null
+  swell_wave_height?: number | null
   swell_wave_direction: number | null
   swell_wave_period: number | null
   wind_wave_height: number | null
@@ -90,6 +95,12 @@ export interface MarAtualPayload {
   temperatura_agua: number | null
   swell_direcao: number | null
   swell_periodo: number | null
+  swell_wave_height_bruto?: number | null
+  swell_wave_height?: number | null
+  wave_height_bruto?: number | null
+  wave_height?: number | null
+  wave_ajustado?: boolean
+  fator_abrigo?: number
   onda_vento_altura: number | null
   corrente_velocidade: number | null
   corrente_direcao: number | null
@@ -236,6 +247,12 @@ export interface PrevisaoPayload {
   rotas: RotaPonto[]
 }
 
+export interface DiaSol {
+  date: string
+  nascer_sol: string | null
+  por_sol: string | null
+}
+
 export interface HourlyScore {
   time: string
   score: number
@@ -250,10 +267,15 @@ export interface HourlyScore {
   surface_pressure: number | null
   cloud_cover: number | null
   uv_index: number | null
+  wave_height_bruto?: number | null
   wave_height: number | null
+  wave_ajustado?: boolean
+  fator_abrigo?: number
   wave_period: number | null
   sea_level_height_msl: number | null
   sea_surface_temperature: number | null
+  swell_wave_height_bruto?: number | null
+  swell_wave_height?: number | null
   swell_wave_direction: number | null
   swell_wave_period: number | null
   wind_wave_height: number | null
@@ -268,6 +290,7 @@ export interface JanelaNavegacao {
   score_medio: number
   fator_limitante: string | null
   fator_limitante_desc: string | null
+  melhor_janela?: boolean
 }
 
 export interface JanelasPayload {
@@ -276,6 +299,7 @@ export interface JanelasPayload {
   ponto_tipo: string
   perfil_id: string
   perfil_nome: string
+  dias_sol?: DiaSol[]
   hourly_scores: HourlyScore[]
   janelas: JanelaNavegacao[]
 }

@@ -721,20 +721,23 @@ export function getCurrentHourForecast(hourly: PrevisaoHoraItem[]): PrevisaoHora
  * amarelo se vento ≤ 20kt e onda ≤ 1.5m
  * vermelho se acima
  */
+export function getFatorAbrigo(tipo?: string): number {
+  const t = (tipo || '').trim().toLowerCase()
+  if (t === 'abrigado') return 0.4
+  if (t === 'semi' || t === 'semi-abrigado' || t === 'semi_abrigado') return 0.7
+  return 1.0 // mar_aberto
+}
+
+/**
+ * Semáforo derivado EXCLUSIVAMENTE do score:
+ * verde ≥ 70, amarelo 50–69, vermelho < 50
+ */
 export function calculateSemaforo(
-  current: PrevisaoHoraItem | null,
+  score: number | null | undefined,
 ): 'verde' | 'amarelo' | 'vermelho' {
-  if (!current) return 'verde'
-
-  const vento = current.wind_speed_10m ?? 0
-  const onda = current.wave_height ?? 0
-
-  if (vento <= 10 && onda <= 0.5) {
-    return 'verde'
-  }
-  if (vento <= 20 && onda <= 1.5) {
-    return 'amarelo'
-  }
+  if (score === null || score === undefined) return 'verde'
+  if (score >= 70) return 'verde'
+  if (score >= 50) return 'amarelo'
   return 'vermelho'
 }
 

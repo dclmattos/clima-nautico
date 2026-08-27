@@ -40,12 +40,20 @@ routerAdd('GET', '/backend/v1/resumo-dia', (e) => {
   // 2. Monta lista de pontos a avaliar: 4 fixos + personalizados
   const pontosLista = []
 
+  const normalizarTipo = (tipo) => {
+    const raw = (tipo || '').trim().toLowerCase()
+    if (raw === 'semi' || raw === 'semi-abrigado' || raw === 'semi_abrigado') return 'semi-abrigado'
+    if (raw === 'aberto' || raw === 'mar aberto' || raw === 'mar-aberto' || raw === 'mar_aberto')
+      return 'mar_aberto'
+    return 'abrigado'
+  }
+
   // Busca pontos fixos do banco
   const PONTOS_FIXOS_DEFAULT = [
     { slug: 'angra', nome: 'Angra dos Reis', tipo: 'abrigado' },
-    { slug: 'abraao', nome: 'Abraão', tipo: 'semi' },
+    { slug: 'abraao', nome: 'Abraão', tipo: 'semi-abrigado' },
     { slug: 'paraty', nome: 'Paraty', tipo: 'abrigado' },
-    { slug: 'juatinga', nome: 'Juatinga', tipo: 'aberto' },
+    { slug: 'juatinga', nome: 'Juatinga', tipo: 'mar_aberto' },
   ]
 
   try {
@@ -56,7 +64,7 @@ routerAdd('GET', '/backend/v1/resumo-dia', (e) => {
         pontosLista.push({
           slug: r.get('slug') || r.id,
           nome: r.get('nome'),
-          tipo: r.get('tipo') || 'abrigado',
+          tipo: normalizarTipo(r.get('tipo')),
           cacheKey: r.get('slug') || r.id,
         })
       }
@@ -94,11 +102,7 @@ routerAdd('GET', '/backend/v1/resumo-dia', (e) => {
             const latStr = pLat.toFixed(3)
             const lonStr = pLon.toFixed(3)
             const cKey = 'custom:' + latStr + ':' + lonStr
-            let pTipo = (cp.tipo || '').toLowerCase().trim()
-            if (pTipo === 'semi' || pTipo === 'semi-abrigado') pTipo = 'semi'
-            else if (pTipo === 'aberto' || pTipo === 'mar aberto' || pTipo === 'mar-aberto')
-              pTipo = 'aberto'
-            else pTipo = 'abrigado'
+            const pTipo = normalizarTipo(cp.tipo)
 
             pontosLista.push({
               slug: cKey,
@@ -121,16 +125,27 @@ routerAdd('GET', '/backend/v1/resumo-dia', (e) => {
       item.wind_speed_10m !== null && item.wind_speed_10m !== undefined ? item.wind_speed_10m : 0
     const windGusts =
       item.wind_gusts_10m !== null && item.wind_gusts_10m !== undefined ? item.wind_gusts_10m : 0
-    const waveHeight =
+
+    // Se o item já tiver wave_height ajustado do cache, utiliza-o; caso contrário aplica fator
+    let waveHeight =
       item.wave_height !== null && item.wave_height !== undefined ? item.wave_height : 0
+    if (item.wave_height_bruto !== undefined && item.wave_height_bruto !== null) {
+      waveHeight = item.wave_height
+    } else {
+      let fator = 1.0
+      if (pontoTipo === 'abrigado') fator = 0.4
+      else if (pontoTipo === 'semi' || pontoTipo === 'semi-abrigado') fator = 0.7
+      waveHeight = waveHeight * fator
+    }
+
     const wavePeriod =
       item.wave_period !== null && item.wave_period !== undefined ? item.wave_period : null
     const precipitation =
       item.precipitation !== null && item.precipitation !== undefined ? item.precipitation : 0
 
     let exposicaoDeducao = 0
-    if (pontoTipo === 'semi') exposicaoDeducao = 10
-    else if (pontoTipo === 'aberto') exposicaoDeducao = 20
+    if (pontoTipo === 'semi' || pontoTipo === 'semi-abrigado') exposicaoDeducao = 10
+    else if (pontoTipo === 'aberto' || pontoTipo === 'mar_aberto') exposicaoDeducao = 20
 
     let penalidadeVento = 0
     let penalidadeRajada = 0
@@ -253,24 +268,26 @@ routerAdd('GET', '/backend/v1/resumo-dia', (e) => {
       })
     }
 
-    // Identifica sunrise e sunset do dia atual
-    let sunriseMs = null
-    let sunsetMs = null
+    // Mapeamento diário de nascer_sol e por_sol reais (mesma lógica unificada de janelas.js)
+    const sunMap = {}
     for (let d = 0; d < daily.length; d++) {
       const dayItem = daily[d]
       const dateStr = dayItem.date || (dayItem.time ? String(dayItem.time).slice(0, 10) : null)
-      if (dateStr === todayDateStr || d === 0) {
-        if (dayItem.sunrise) sunriseMs = new Date(dayItem.sunrise).getTime()
-        if (dayItem.sunset) sunsetMs = new Date(dayItem.sunset).getTime()
-        break
+      if (dateStr) {
+        sunMap[dateStr] = {
+          sunrise: dayItem.sunrise ? new Date(dayItem.sunrise).getTime() : null,
+          sunset: dayItem.sunset ? new Date(dayItem.sunset).getTime() : null,
+        }
       }
     }
 
-    // Se não tiver astronomia exata, usa 06:00 as 18:00
+    // Função unificada de intervalo diurno real (nascer_sol a por_sol)
     const isDaylight = (isoTime) => {
       const tMs = new Date(isoTime).getTime()
-      if (sunriseMs && sunsetMs) {
-        return tMs >= sunriseMs - 30 * 60 * 1000 && tMs <= sunsetMs + 30 * 60 * 1000
+      const dayKey = isoTime.slice(0, 10)
+      const daySun = sunMap[dayKey]
+      if (daySun && daySun.sunrise && daySun.sunset) {
+        return tMs >= daySun.sunrise && tMs <= daySun.sunset
       }
       const hour = new Date(isoTime).getHours()
       return hour >= 6 && hour < 18
