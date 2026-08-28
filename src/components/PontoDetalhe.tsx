@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Wind,
   Compass,
@@ -598,13 +599,28 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             )}
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-xs">
-                              <SkyConditionIcon
-                                iconName={sky.iconName}
-                                className="w-4 h-4 shrink-0"
-                              />
-                              <span className={sky.labelColor}>{sky.label}</span>
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="inline-flex items-center justify-center cursor-help focus:outline-none"
+                                  tabIndex={0}
+                                  role="img"
+                                  aria-label={sky.label}
+                                  title={sky.label}
+                                >
+                                  <SkyConditionIcon
+                                    iconName={sky.iconName}
+                                    className="w-5 h-5 shrink-0"
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="bg-[#11161d] border-zinc-700 text-zinc-100 text-xs px-2.5 py-1 shadow-lg font-medium"
+                              >
+                                {sky.label}
+                              </TooltipContent>
+                            </Tooltip>
                           </td>
                           <td className="p-3 font-bold text-sky-300">{vento}</td>
                           <td className="p-3 text-amber-400">{raj}</td>
@@ -778,13 +794,28 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             )}
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-xs">
-                              <SkyConditionIcon
-                                iconName={sky.iconName}
-                                className="w-4 h-4 shrink-0"
-                              />
-                              <span className={sky.labelColor}>{sky.label}</span>
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="inline-flex items-center justify-center cursor-help focus:outline-none"
+                                  tabIndex={0}
+                                  role="img"
+                                  aria-label={sky.label}
+                                  title={sky.label}
+                                >
+                                  <SkyConditionIcon
+                                    iconName={sky.iconName}
+                                    className="w-5 h-5 shrink-0"
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="bg-[#11161d] border-zinc-700 text-zinc-100 text-xs px-2.5 py-1 shadow-lg font-medium"
+                              >
+                                {sky.label}
+                              </TooltipContent>
+                            </Tooltip>
                           </td>
                           <td className="p-3 whitespace-nowrap font-mono">
                             {dia.temperaturaMax !== null && dia.temperaturaMax !== undefined ? (

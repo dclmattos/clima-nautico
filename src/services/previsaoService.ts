@@ -1185,7 +1185,15 @@ export function getWeatherCondition(code: number | null | undefined): {
   if (c >= 80 && c <= 82) {
     return {
       iconName: 'CloudRain',
-      label: 'Chuva forte',
+      label: 'Pancadas de chuva',
+      labelColor: 'text-zinc-400',
+      isStorm: false,
+    }
+  }
+  if (c >= 85 && c <= 86) {
+    return {
+      iconName: 'CloudSnow',
+      label: 'Pancadas de neve',
       labelColor: 'text-zinc-400',
       isStorm: false,
     }
@@ -1200,8 +1208,8 @@ export function getWeatherCondition(code: number | null | undefined): {
   }
 
   return {
-    iconName: 'CloudOff',
-    label: '—',
+    iconName: 'Cloud',
+    label: 'Nublado',
     labelColor: 'text-zinc-400',
     isStorm: false,
   }
