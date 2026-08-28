@@ -868,6 +868,7 @@ export function aggregate7DaysForecast(
     daylight_duration?: number | null
     temperature_2m_max?: number | null
     temperature_2m_min?: number | null
+    precipitation_probability_max?: number | null
   }>,
 ): ResumoDiaItem[] {
   if (!hourly || hourly.length === 0) return []
@@ -889,6 +890,7 @@ export function aggregate7DaysForecast(
       sunset: number | null
       tempMax: number | null
       tempMin: number | null
+      precipProbMax: number | null
     }
   > = {}
   if (daily && daily.length > 0) {
@@ -903,6 +905,10 @@ export function aggregate7DaysForecast(
         tempMin:
           d.temperature_2m_min !== undefined && d.temperature_2m_min !== null
             ? d.temperature_2m_min
+            : null,
+        precipProbMax:
+          d.precipitation_probability_max !== undefined && d.precipitation_probability_max !== null
+            ? d.precipitation_probability_max
             : null,
       }
     }
@@ -938,8 +944,11 @@ export function aggregate7DaysForecast(
     const dataExibicao = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
 
     let maxVento: number | null = null
+    let maxRajada: number | null = null
     let maxOnda: number | null = null
     let totalChuva = 0
+    let maxPrecipProb: number | null = null
+    let minVisibilidade: number | null = null
     let maxTempHourly: number | null = null
     let minTempHourly: number | null = null
 
@@ -971,6 +980,11 @@ export function aggregate7DaysForecast(
           maxVento = it.wind_speed_10m
         }
       }
+      if (it.wind_gusts_10m !== null && it.wind_gusts_10m !== undefined) {
+        if (maxRajada === null || it.wind_gusts_10m > maxRajada) {
+          maxRajada = it.wind_gusts_10m
+        }
+      }
       if (it.wave_height !== null) {
         if (maxOnda === null || it.wave_height > maxOnda) {
           maxOnda = it.wave_height
@@ -978,6 +992,16 @@ export function aggregate7DaysForecast(
       }
       if (it.precipitation !== null && it.precipitation > 0) {
         totalChuva += it.precipitation
+      }
+      if (it.precipitation_probability !== null && it.precipitation_probability !== undefined) {
+        if (maxPrecipProb === null || it.precipitation_probability > maxPrecipProb) {
+          maxPrecipProb = it.precipitation_probability
+        }
+      }
+      if (it.visibility !== null && it.visibility !== undefined) {
+        if (minVisibilidade === null || it.visibility < minVisibilidade) {
+          minVisibilidade = it.visibility
+        }
       }
       if (it.temperature_2m !== null && it.temperature_2m !== undefined) {
         if (maxTempHourly === null || it.temperature_2m > maxTempHourly) {
@@ -1037,6 +1061,10 @@ export function aggregate7DaysForecast(
       daySun?.tempMax !== null && daySun?.tempMax !== undefined ? daySun.tempMax : maxTempHourly
     const finalTempMin =
       daySun?.tempMin !== null && daySun?.tempMin !== undefined ? daySun.tempMin : minTempHourly
+    const finalPrecipProbMax =
+      daySun?.precipProbMax !== null && daySun?.precipProbMax !== undefined
+        ? daySun.precipProbMax
+        : maxPrecipProb
 
     return {
       dataIso: dateStr,
@@ -1045,9 +1073,15 @@ export function aggregate7DaysForecast(
       isHoje,
       ventoMax: maxVento !== null ? Math.round(maxVento * 10) / 10 : null,
       ventoMaxBeaufort: maxVento !== null ? getBeaufortScale(maxVento) : 0,
+      rajadaMax: maxRajada !== null ? Math.round(maxRajada * 10) / 10 : null,
       ondaMax: maxOnda !== null ? Math.round(maxOnda * 100) / 100 : null,
       ondaMaxDouglas: maxOnda !== null ? getDouglasScale(maxOnda).grau : 0,
       chuvaTotal: Math.round(totalChuva * 10) / 10,
+      probabilidadeChuvaMax:
+        finalPrecipProbMax !== null && finalPrecipProbMax !== undefined
+          ? Math.round(finalPrecipProbMax)
+          : null,
+      visibilidadeMin: minVisibilidade !== null ? Math.round(minVisibilidade) : null,
       temperaturaMax:
         finalTempMax !== null && finalTempMax !== undefined ? Math.round(finalTempMax) : null,
       temperaturaMin:
@@ -1258,4 +1292,297 @@ export function obterTodosDestinosParaRotas(
   }
 
   return destinos
+}
+
+export interface FactorItem {
+  fator: string
+  penalidade: number
+  descricao: string
+  cap?: number
+}
+
+export interface ScoreNavegacaoResult {
+  score: number | null
+  faixa: 'Excelente' | 'Bom' | 'Atenção' | 'Desfavorável' | null
+  badgeColor: string
+  fatores: FactorItem[]
+  hasData: boolean
+}
+
+export interface ScoreInputData {
+  windSpeed: number | null | undefined
+  windGust?: number | null | undefined
+  waveHeight?: number | null | undefined
+  precipitationProbability?: number | null | undefined
+  precipitationMm?: number | null | undefined
+  weatherCode?: number | null | undefined
+  visibilityMeters?: number | null | undefined
+}
+
+/**
+ * Calcula o Score de Navegação (0 a 10) determinístico com lista transparente de fatores
+ */
+export function calcularScoreNavegacao(data: ScoreInputData): ScoreNavegacaoResult {
+  const hasVento = data.windSpeed !== null && data.windSpeed !== undefined && !isNaN(data.windSpeed)
+  const hasOnda =
+    data.waveHeight !== null && data.waveHeight !== undefined && !isNaN(data.waveHeight)
+  const hasChuvaProb =
+    data.precipitationProbability !== null &&
+    data.precipitationProbability !== undefined &&
+    !isNaN(data.precipitationProbability)
+  const hasChuvaMm =
+    data.precipitationMm !== null &&
+    data.precipitationMm !== undefined &&
+    !isNaN(data.precipitationMm)
+  const hasCode =
+    data.weatherCode !== null && data.weatherCode !== undefined && !isNaN(data.weatherCode)
+
+  // Se não temos nem vento nem onda nem código meteorológico básico, tratamos como dados indisponíveis
+  if (!hasVento && !hasOnda && !hasCode) {
+    return {
+      score: null,
+      faixa: null,
+      badgeColor: '',
+      fatores: [],
+      hasData: false,
+    }
+  }
+
+  let baseScore = 10.0
+  let maxCap: number | null = null
+  const fatores: FactorItem[] = []
+
+  // 1. Vento sustentado (nós)
+  // ≤8: 0 · 9–12: −1 · 13–16: −2 · 17–21: −4 · 22–27: −6 · >27: score máximo 1
+  if (hasVento) {
+    const v = Number(data.windSpeed)
+    const vRound = Math.round(v)
+    if (vRound > 27) {
+      if (maxCap === null || maxCap > 1) maxCap = 1
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: 0,
+        cap: 1,
+        descricao: `Vento ${vRound} kt: limite máx. 1.0 (vento extremo)`,
+      })
+    } else if (vRound >= 22) {
+      baseScore -= 6
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: -6,
+        descricao: `Vento ${vRound} kt: −6`,
+      })
+    } else if (vRound >= 17) {
+      baseScore -= 4
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: -4,
+        descricao: `Vento ${vRound} kt: −4`,
+      })
+    } else if (vRound >= 13) {
+      baseScore -= 2
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: -2,
+        descricao: `Vento ${vRound} kt: −2`,
+      })
+    } else if (vRound >= 9) {
+      baseScore -= 1
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: -1,
+        descricao: `Vento ${vRound} kt: −1`,
+      })
+    } else {
+      fatores.push({
+        fator: 'Vento sustentado',
+        penalidade: 0,
+        descricao: `Vento brando (${vRound} kt): sem penalidade`,
+      })
+    }
+  }
+
+  // 2. Rajadas (nós)
+  // rajada − vento ≥ 10 nós: −1 adicional · rajada > 30: score máximo 2
+  if (data.windGust !== null && data.windGust !== undefined && !isNaN(data.windGust)) {
+    const g = Number(data.windGust)
+    const gRound = Math.round(g)
+    const v = hasVento ? Number(data.windSpeed) : 0
+    const diff = g - v
+
+    if (gRound > 30) {
+      if (maxCap === null || maxCap > 2) maxCap = 2
+      fatores.push({
+        fator: 'Rajada',
+        penalidade: 0,
+        cap: 2,
+        descricao: `Rajada ${gRound} kt: limite máx. 2.0 (rajada severa)`,
+      })
+    }
+
+    if (diff >= 9.9) {
+      baseScore -= 1
+      fatores.push({
+        fator: 'Variação de rajada',
+        penalidade: -1,
+        descricao: `Rajada (+${Math.round(diff)} kt acima do vento): −1`,
+      })
+    }
+  }
+
+  // 3. Onda / altura significativa (m), se disponível
+  // ≤0,5: 0 · 0,6–1,0: −1 · 1,1–1,5: −2 · 1,6–2,0: −4 · >2,0: score máximo 2
+  if (hasOnda) {
+    const o = Number(data.waveHeight)
+    const oFixed = o.toFixed(1)
+    if (o > 2.05) {
+      if (maxCap === null || maxCap > 2) maxCap = 2
+      fatores.push({
+        fator: 'Ondulação',
+        penalidade: 0,
+        cap: 2,
+        descricao: `Onda ${oFixed} m: limite máx. 2.0 (mar agitado)`,
+      })
+    } else if (o >= 1.55) {
+      baseScore -= 4
+      fatores.push({
+        fator: 'Ondulação',
+        penalidade: -4,
+        descricao: `Onda ${oFixed} m: −4`,
+      })
+    } else if (o >= 1.05) {
+      baseScore -= 2
+      fatores.push({
+        fator: 'Ondulação',
+        penalidade: -2,
+        descricao: `Onda ${oFixed} m: −2`,
+      })
+    } else if (o >= 0.55) {
+      baseScore -= 1
+      fatores.push({
+        fator: 'Ondulação',
+        penalidade: -1,
+        descricao: `Onda ${oFixed} m: −1`,
+      })
+    } else {
+      fatores.push({
+        fator: 'Ondulação',
+        penalidade: 0,
+        descricao: `Onda ${oFixed} m: sem penalidade`,
+      })
+    }
+  }
+
+  // 4. Probabilidade de chuva (%)
+  // 40–60: −1 · 61–80: −2 · >80: −3
+  let probVal: number | null = null
+  if (hasChuvaProb) {
+    probVal = Number(data.precipitationProbability)
+  } else if (hasChuvaMm) {
+    // Estimativa de probabilidade a partir da precipitação horária em mm se a probabilidade não estiver no payload
+    const mm = Number(data.precipitationMm)
+    if (mm > 5.0) probVal = 85
+    else if (mm > 1.5) probVal = 70
+    else if (mm > 0.1) probVal = 50
+    else probVal = 0
+  }
+
+  if (probVal !== null) {
+    const pRound = Math.round(probVal)
+    if (pRound > 80) {
+      baseScore -= 3
+      fatores.push({
+        fator: 'Chuva',
+        penalidade: -3,
+        descricao: `Probabilidade de chuva ${pRound}%: −3`,
+      })
+    } else if (pRound >= 61) {
+      baseScore -= 2
+      fatores.push({
+        fator: 'Chuva',
+        penalidade: -2,
+        descricao: `Probabilidade de chuva ${pRound}%: −2`,
+      })
+    } else if (pRound >= 40) {
+      baseScore -= 1
+      fatores.push({
+        fator: 'Chuva',
+        penalidade: -1,
+        descricao: `Probabilidade de chuva ${pRound}%: −1`,
+      })
+    }
+  }
+
+  // 5. Condição severa (código de trovoada/tempestade): score máximo 1
+  // WMO 95, 96, 99 (tempestade / trovoada)
+  if (hasCode) {
+    const c = Math.round(Number(data.weatherCode))
+    if (c >= 95 && c <= 99) {
+      if (maxCap === null || maxCap > 1) maxCap = 1
+      fatores.push({
+        fator: 'Condição severa',
+        penalidade: 0,
+        cap: 1,
+        descricao: 'Tempestade / Trovoada (WMO 95-99): limite máx. 1.0',
+      })
+    }
+  }
+
+  // 6. Visibilidade (se disponível) < 2 km (2000m): −2
+  if (
+    data.visibilityMeters !== null &&
+    data.visibilityMeters !== undefined &&
+    !isNaN(data.visibilityMeters)
+  ) {
+    const vis = Number(data.visibilityMeters)
+    if (vis < 2000) {
+      baseScore -= 2
+      const visKm = (vis / 1000).toFixed(1)
+      fatores.push({
+        fator: 'Visibilidade reduzida',
+        penalidade: -2,
+        descricao: `Visibilidade ${visKm} km (<2 km): −2`,
+      })
+    }
+  }
+
+  let finalScore = baseScore
+  if (maxCap !== null && finalScore > maxCap) {
+    finalScore = maxCap
+  }
+
+  // Limita ao intervalo 0 a 10 e arredonda a 1 casa decimal
+  if (finalScore < 0) finalScore = 0
+  if (finalScore > 10) finalScore = 10
+  finalScore = Math.round(finalScore * 10) / 10
+
+  // Faixas:
+  // 8,0–10 · "Excelente" — verde-mar
+  // 6,0–7,9 · "Bom" — azul
+  // 4,0–5,9 · "Atenção" — âmbar
+  // 0–3,9 · "Desfavorável" — vermelho
+  let faixa: 'Excelente' | 'Bom' | 'Atenção' | 'Desfavorável' = 'Desfavorável'
+  let badgeColor = 'bg-rose-700 text-white border-rose-600'
+
+  if (finalScore >= 7.95) {
+    faixa = 'Excelente'
+    badgeColor = 'bg-emerald-700 text-white border-emerald-600 shadow-sm'
+  } else if (finalScore >= 5.95) {
+    faixa = 'Bom'
+    badgeColor = 'bg-sky-700 text-white border-sky-600 shadow-sm'
+  } else if (finalScore >= 3.95) {
+    faixa = 'Atenção'
+    badgeColor = 'bg-amber-400 text-zinc-950 border-amber-300 font-bold shadow-sm'
+  } else {
+    faixa = 'Desfavorável'
+    badgeColor = 'bg-rose-700 text-white border-rose-600 shadow-sm'
+  }
+
+  return {
+    score: finalScore,
+    faixa,
+    badgeColor,
+    fatores,
+    hasData: true,
+  }
 }

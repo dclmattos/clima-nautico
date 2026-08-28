@@ -106,14 +106,14 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   }
 
   // 3. Consulta endpoints do Open-Meteo
-  // Forecast: daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code
+  // Forecast: daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min,precipitation_probability_max & hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,precipitation_probability,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code
   const weatherUrl =
     'https://api.open-meteo.com/v1/forecast?latitude=' +
     encodeURIComponent(lat) +
     '&longitude=' +
     encodeURIComponent(lon) +
-    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code' +
-    '&daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min' +
+    '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,precipitation_probability,visibility,temperature_2m,surface_pressure,cloud_cover,uv_index,weather_code' +
+    '&daily=sunrise,sunset,daylight_duration,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
     '&wind_speed_unit=kn&timezone=America%2FSao_Paulo&forecast_days=7'
 
   // Marine: hourly=wave_height,wave_period,sea_level_height_msl,sea_surface_temperature,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,ocean_current_velocity,ocean_current_direction
@@ -287,6 +287,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   const wWindDir = weatherData.hourly.wind_direction_10m || []
   const wWindGusts = weatherData.hourly.wind_gusts_10m || []
   const wPrecipitation = weatherData.hourly.precipitation || []
+  const wPrecipitationProb = weatherData.hourly.precipitation_probability || []
   const wVisibility = weatherData.hourly.visibility || []
   const wTemp = weatherData.hourly.temperature_2m || []
   const wPressure = weatherData.hourly.surface_pressure || []
@@ -325,6 +326,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       wind_gusts_10m: wWindGusts[i] !== undefined ? wWindGusts[i] : null,
       beaufort: windSpd !== null ? getBeaufort(windSpd) : 0,
       precipitation: wPrecipitation[i] !== undefined ? wPrecipitation[i] : null,
+      precipitation_probability: wPrecipitationProb[i] !== undefined ? wPrecipitationProb[i] : null,
       visibility: wVisibility[i] !== undefined ? wVisibility[i] : null,
       temperature_2m: wTemp[i] !== undefined ? wTemp[i] : null,
       surface_pressure: wPressure[i] !== undefined ? wPressure[i] : null,
@@ -666,6 +668,7 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
   const dailyDaylight = dailyData.daylight_duration || []
   const dailyTempMax = dailyData.temperature_2m_max || []
   const dailyTempMin = dailyData.temperature_2m_min || []
+  const dailyPrecipProbMax = dailyData.precipitation_probability_max || []
   const dailyTimes = dailyData.time || []
 
   const dailyList = []
@@ -677,6 +680,8 @@ routerAdd('GET', '/backend/v1/previsao', (e) => {
       daylight_duration: dailyDaylight[i] || null,
       temperature_2m_max: dailyTempMax[i] !== undefined ? dailyTempMax[i] : null,
       temperature_2m_min: dailyTempMin[i] !== undefined ? dailyTempMin[i] : null,
+      precipitation_probability_max:
+        dailyPrecipProbMax[i] !== undefined ? dailyPrecipProbMax[i] : null,
     })
   }
 

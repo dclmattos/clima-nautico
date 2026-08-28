@@ -19,11 +19,14 @@ import {
   aggregate7DaysForecast,
   PONTOS_DISPONIVEIS,
   getWeatherCondition,
+  calcularScoreNavegacao,
+  ScoreNavegacaoResult,
 } from '@/services/previsaoService'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Wind,
   Compass,
@@ -42,6 +45,11 @@ import {
   TrendingUp,
   Minus,
   RefreshCw,
+  Info,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ShieldAlert,
 } from 'lucide-react'
 import { SkyConditionIcon } from '@/components/SkyConditionIcon'
 import { useNavigate } from 'react-router-dom'
@@ -70,6 +78,8 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
   const { toast } = useToast()
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<'48h' | '7dias'>('48h')
+  const [sort48hScore, setSort48hScore] = useState<'none' | 'asc' | 'desc'>('none')
+  const [sort7diasScore, setSort7diasScore] = useState<'none' | 'asc' | 'desc'>('none')
 
   const isCustom =
     isPersonalizado ||
@@ -125,13 +135,79 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
     return getWeatherCondition(weatherCode)
   }, [currentHourData, previsao.weather_code])
 
-  const { items: forecast48h } = useMemo(() => {
+  const { items: rawForecast48h } = useMemo(() => {
     return getNext48HoursForecast(previsao.hourly || [])
   }, [previsao.hourly])
 
-  const diasResumo = useMemo(() => {
+  const forecast48hWithScore = useMemo(() => {
+    return rawForecast48h.map((item, originalIndex) => {
+      const scoreResult = calcularScoreNavegacao({
+        windSpeed: item.wind_speed_10m,
+        windGust: item.wind_gusts_10m,
+        waveHeight: item.wave_height,
+        precipitationProbability: item.precipitation_probability,
+        precipitationMm: item.precipitation,
+        weatherCode: item.weather_code,
+        visibilityMeters: item.visibility,
+      })
+      return {
+        item,
+        scoreResult,
+        originalIndex,
+      }
+    })
+  }, [rawForecast48h])
+
+  const sortedForecast48h = useMemo(() => {
+    if (sort48hScore === 'none') return forecast48hWithScore
+    const copy = [...forecast48hWithScore]
+    copy.sort((a, b) => {
+      const sA = a.scoreResult.score ?? -1
+      const sB = b.scoreResult.score ?? -1
+      if (sort48hScore === 'asc') {
+        return sA - sB || a.originalIndex - b.originalIndex
+      }
+      return sB - sA || a.originalIndex - b.originalIndex
+    })
+    return copy
+  }, [forecast48hWithScore, sort48hScore])
+
+  const rawDiasResumo = useMemo(() => {
     return aggregate7DaysForecast(previsao.hourly || [], previsao.daily || [])
   }, [previsao.hourly, previsao.daily])
+
+  const diasResumoWithScore = useMemo(() => {
+    return rawDiasResumo.map((dia, originalIndex) => {
+      const scoreResult = calcularScoreNavegacao({
+        windSpeed: dia.ventoMax,
+        windGust: dia.rajadaMax,
+        waveHeight: dia.ondaMax,
+        precipitationProbability: dia.probabilidadeChuvaMax,
+        precipitationMm: dia.chuvaTotal,
+        weatherCode: dia.weatherCode,
+        visibilityMeters: dia.visibilidadeMin,
+      })
+      return {
+        dia,
+        scoreResult,
+        originalIndex,
+      }
+    })
+  }, [rawDiasResumo])
+
+  const sortedDiasResumo = useMemo(() => {
+    if (sort7diasScore === 'none') return diasResumoWithScore
+    const copy = [...diasResumoWithScore]
+    copy.sort((a, b) => {
+      const sA = a.scoreResult.score ?? -1
+      const sB = b.scoreResult.score ?? -1
+      if (sort7diasScore === 'asc') {
+        return sA - sB || a.originalIndex - b.originalIndex
+      }
+      return sB - sA || a.originalIndex - b.originalIndex
+    })
+    return copy
+  }, [diasResumoWithScore, sort7diasScore])
 
   const astro = previsao.astronomia
   const marAtual = previsao.mar_atual
@@ -378,10 +454,36 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
             {/* ABA 1: TABELA 48 HORAS */}
             <TabsContent value="48h" className="space-y-3 m-0">
               <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
-                      <th className="p-3">Horário</th>
+                      <th className="p-3 sticky left-0 z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                        Horário
+                      </th>
+                      <th
+                        className="p-3 sticky left-[90px] sm:left-[105px] z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] cursor-pointer select-none hover:text-white transition-colors"
+                        onClick={() => {
+                          setSort48hScore((prev) => {
+                            if (prev === 'none') return 'desc'
+                            if (prev === 'desc') return 'asc'
+                            return 'none'
+                          })
+                        }}
+                        title="Clique para ordenar por Score"
+                      >
+                        <div className="inline-flex items-center gap-1">
+                          <span>Score</span>
+                          {sort48hScore === 'desc' && (
+                            <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                          {sort48hScore === 'asc' && (
+                            <ArrowUp className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                          {sort48hScore === 'none' && (
+                            <ArrowUpDown className="w-3 h-3 text-zinc-500 hover:text-zinc-300" />
+                          )}
+                        </div>
+                      </th>
                       <th className="p-3">Céu</th>
                       <th className="p-3">Vento (kt)</th>
                       <th className="p-3">Rajada (kt)</th>
@@ -394,7 +496,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
-                    {forecast48h.map((item, idx) => {
+                    {sortedForecast48h.map(({ item, scoreResult }, idx) => {
                       const sky = getWeatherCondition(item.weather_code)
                       const vento =
                         item.wind_speed_10m !== null ? Math.round(item.wind_speed_10m) : '--'
@@ -426,10 +528,74 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                       return (
                         <tr
                           key={idx}
-                          className="hover:bg-[#1c2430] transition-colors text-zinc-200"
+                          className="hover:bg-[#1c2430] transition-colors text-zinc-200 group"
                         >
-                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
+                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
                             {formatHoraTabela(item.time)}
+                          </td>
+                          <td className="p-3 font-sans whitespace-nowrap sticky left-[90px] sm:left-[105px] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                            {scoreResult.hasData && scoreResult.score !== null ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-sans text-xs font-semibold cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                  >
+                                    <span>{scoreResult.score.toFixed(1)}</span>
+                                    <span className="text-[10px] font-normal opacity-90">
+                                      {scoreResult.faixa}
+                                    </span>
+                                    <Info className="w-2.5 h-2.5 opacity-70 ml-0.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="start"
+                                  className="w-72 p-3 bg-[#11161d] border-zinc-700 text-zinc-100 text-xs shadow-2xl z-50 rounded-xl"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                                      <span className="font-bold text-white flex items-center gap-1.5">
+                                        <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                        Como calculamos
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] px-1.5 py-0 ${scoreResult.badgeColor}`}
+                                      >
+                                        {scoreResult.score.toFixed(1)} · {scoreResult.faixa}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400 leading-tight">
+                                      Base de 10 pontos com penalidades pelo pior valor do período:
+                                    </p>
+                                    <div className="space-y-1 pt-1 font-mono text-[11px]">
+                                      {scoreResult.fatores.map((f, fIdx) => (
+                                        <div
+                                          key={fIdx}
+                                          className={`flex items-start justify-between p-1 rounded ${
+                                            f.penalidade < 0 || f.cap !== undefined
+                                              ? 'bg-zinc-800/60 text-zinc-200'
+                                              : 'text-zinc-400'
+                                          }`}
+                                        >
+                                          <span className="font-sans pr-2 leading-tight">
+                                            {f.descricao}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {scoreResult.fatores.length === 0 && (
+                                        <div className="text-emerald-400 font-sans text-xs">
+                                          Condições ideais: nenhuma penalidade aplicada.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <span className="text-zinc-500 font-mono">—</span>
+                            )}
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
                             <span className="inline-flex items-center gap-1 text-xs">
@@ -473,15 +639,48 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                   </tbody>
                 </table>
               </div>
+              <div className="p-3 rounded-lg bg-[#141a22] border border-zinc-800/80 text-[11px] text-zinc-400 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  O score é um indicativo automático e não substitui os avisos de mau tempo da
+                  Marinha (CHM) e a avaliação do comandante.
+                </span>
+              </div>
             </TabsContent>
 
             {/* ABA 2: RESUMO 7 DIAS */}
             <TabsContent value="7dias" className="space-y-3 m-0">
               <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
-                      <th className="p-3">Data / Dia</th>
+                      <th className="p-3 sticky left-0 z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                        Data / Dia
+                      </th>
+                      <th
+                        className="p-3 sticky left-[110px] sm:left-[130px] z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] cursor-pointer select-none hover:text-white transition-colors"
+                        onClick={() => {
+                          setSort7diasScore((prev) => {
+                            if (prev === 'none') return 'desc'
+                            if (prev === 'desc') return 'asc'
+                            return 'none'
+                          })
+                        }}
+                        title="Clique para ordenar por Score"
+                      >
+                        <div className="inline-flex items-center gap-1">
+                          <span>Score</span>
+                          {sort7diasScore === 'desc' && (
+                            <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                          {sort7diasScore === 'asc' && (
+                            <ArrowUp className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                          {sort7diasScore === 'none' && (
+                            <ArrowUpDown className="w-3 h-3 text-zinc-500 hover:text-zinc-300" />
+                          )}
+                        </div>
+                      </th>
                       <th className="p-3">Céu</th>
                       <th className="p-3">Temp</th>
                       <th className="p-3">Vento Máx</th>
@@ -490,16 +689,18 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
-                    {diasResumo.map((dia, idx) => {
+                    {sortedDiasResumo.map(({ dia, scoreResult }, idx) => {
                       const sky = getWeatherCondition(dia.weatherCode)
                       return (
                         <tr
                           key={idx}
-                          className={`hover:bg-[#1c2430] transition-colors text-zinc-200 ${
+                          className={`hover:bg-[#1c2430] transition-colors text-zinc-200 group ${
                             dia.isHoje ? 'bg-cyan-950/25' : ''
                           }`}
                         >
-                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
+                          <td
+                            className={`p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
+                          >
                             <span className="flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                               <span className={dia.isHoje ? 'text-cyan-300 font-bold' : ''}>
@@ -509,6 +710,72 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                                 ({dia.dataExibicao})
                               </span>
                             </span>
+                          </td>
+                          <td
+                            className={`p-3 font-sans whitespace-nowrap sticky left-[110px] sm:left-[130px] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
+                          >
+                            {scoreResult.hasData && scoreResult.score !== null ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-sans text-xs font-semibold cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                  >
+                                    <span>{scoreResult.score.toFixed(1)}</span>
+                                    <span className="text-[10px] font-normal opacity-90">
+                                      {scoreResult.faixa}
+                                    </span>
+                                    <Info className="w-2.5 h-2.5 opacity-70 ml-0.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="start"
+                                  className="w-72 p-3 bg-[#11161d] border-zinc-700 text-zinc-100 text-xs shadow-2xl z-50 rounded-xl"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                                      <span className="font-bold text-white flex items-center gap-1.5">
+                                        <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                        Como calculamos
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] px-1.5 py-0 ${scoreResult.badgeColor}`}
+                                      >
+                                        {scoreResult.score.toFixed(1)} · {scoreResult.faixa}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400 leading-tight">
+                                      Base de 10 pontos com penalidades pelo pior valor do dia:
+                                    </p>
+                                    <div className="space-y-1 pt-1 font-mono text-[11px]">
+                                      {scoreResult.fatores.map((f, fIdx) => (
+                                        <div
+                                          key={fIdx}
+                                          className={`flex items-start justify-between p-1 rounded ${
+                                            f.penalidade < 0 || f.cap !== undefined
+                                              ? 'bg-zinc-800/60 text-zinc-200'
+                                              : 'text-zinc-400'
+                                          }`}
+                                        >
+                                          <span className="font-sans pr-2 leading-tight">
+                                            {f.descricao}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {scoreResult.fatores.length === 0 && (
+                                        <div className="text-emerald-400 font-sans text-xs">
+                                          Condições ideais: nenhuma penalidade aplicada.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <span className="text-zinc-500 font-mono">—</span>
+                            )}
                           </td>
                           <td className="p-3 font-sans whitespace-nowrap">
                             <span className="inline-flex items-center gap-1 text-xs">
@@ -562,6 +829,13 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+              <div className="p-3 rounded-lg bg-[#141a22] border border-zinc-800/80 text-[11px] text-zinc-400 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  O score é um indicativo automático e não substitui os avisos de mau tempo da
+                  Marinha (CHM) e a avaliação do comandante.
+                </span>
               </div>
             </TabsContent>
           </Tabs>

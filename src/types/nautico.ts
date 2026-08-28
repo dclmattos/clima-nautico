@@ -32,6 +32,7 @@ export interface PrevisaoHoraItem {
   wind_gusts_10m: number | null
   beaufort: number
   precipitation: number | null
+  precipitation_probability?: number | null
   visibility: number | null
   temperature_2m: number | null
   surface_pressure: number | null
@@ -62,9 +63,12 @@ export interface ResumoDiaItem {
   isHoje: boolean
   ventoMax: number | null
   ventoMaxBeaufort: number
+  rajadaMax?: number | null
   ondaMax: number | null
   ondaMaxDouglas: number
   chuvaTotal: number
+  probabilidadeChuvaMax?: number | null
+  visibilidadeMin?: number | null
   temperaturaMax?: number | null
   temperaturaMin?: number | null
   weatherCode?: number | null
@@ -240,6 +244,7 @@ export interface PrevisaoPayload {
     daylight_duration: number | null
     temperature_2m_max?: number | null
     temperature_2m_min?: number | null
+    precipitation_probability_max?: number | null
   }>
   astronomia: AstronomiaPayload
   pressao_tendencia: PressaoTendenciaPayload
