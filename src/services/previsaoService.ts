@@ -147,6 +147,17 @@ export async function fetchPrevisaoPorPonto(
   }
 
   const data: PrevisaoPayload = await res.json()
+  if (data?.hourly && Array.isArray(data.hourly)) {
+    const missingCount = data.hourly.filter(
+      (h) => h.weather_code === null || h.weather_code === undefined,
+    ).length
+    if (missingCount > 0) {
+      console.warn(
+        `[previsaoService] ${missingCount} itens de hourly possuem weather_code ausente/nulo para o ponto:`,
+        pontoId || customCoords?.nome || 'coordenadas',
+      )
+    }
+  }
   return data
 }
 

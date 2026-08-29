@@ -147,7 +147,10 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
         waveHeight: item.wave_height,
         precipitationProbability: item.precipitation_probability,
         precipitationMm: item.precipitation,
-        weatherCode: item.weather_code,
+        weatherCode:
+          item.weather_code !== null && item.weather_code !== undefined
+            ? item.weather_code
+            : previsao.weather_code,
         visibilityMeters: item.visibility,
       })
       return {
@@ -184,7 +187,10 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
         waveHeight: dia.ondaMax,
         precipitationProbability: dia.probabilidadeChuvaMax,
         precipitationMm: dia.chuvaTotal,
-        weatherCode: dia.weatherCode,
+        weatherCode:
+          dia.weatherCode !== null && dia.weatherCode !== undefined
+            ? dia.weatherCode
+            : previsao.weather_code,
         visibilityMeters: dia.visibilidadeMin,
       })
       return {
@@ -497,7 +503,11 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
                     {sortedForecast48h.map(({ item, scoreResult }, idx) => {
-                      const sky = getWeatherCondition(item.weather_code)
+                      const sky = getWeatherCondition(
+                        item.weather_code !== null && item.weather_code !== undefined
+                          ? item.weather_code
+                          : previsao.weather_code,
+                      )
                       const vento =
                         item.wind_speed_10m !== null ? Math.round(item.wind_speed_10m) : '--'
                       const raj =
@@ -694,7 +704,11 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
                     {sortedDiasResumo.map(({ dia, scoreResult }, idx) => {
-                      const sky = getWeatherCondition(dia.weatherCode)
+                      const sky = getWeatherCondition(
+                        dia.weatherCode !== null && dia.weatherCode !== undefined
+                          ? dia.weatherCode
+                          : previsao.weather_code,
+                      )
                       return (
                         <tr
                           key={idx}
