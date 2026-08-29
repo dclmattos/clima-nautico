@@ -45,7 +45,6 @@ import {
   TrendingUp,
   Minus,
   RefreshCw,
-  Info,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -463,11 +462,14 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
-                      <th className="p-3 sticky left-0 z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                      <th className="p-3 whitespace-nowrap sticky left-0 z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5.25rem] sm:min-w-[5.75rem]">
                         Horário
                       </th>
+                      <th className="p-3 text-center whitespace-nowrap sticky left-[5.25rem] sm:left-[5.75rem] z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5rem] sm:min-w-[5.5rem]">
+                        Condição
+                      </th>
                       <th
-                        className="p-3 sticky left-[90px] sm:left-[105px] z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] cursor-pointer select-none hover:text-white transition-colors"
+                        className="p-3 text-center whitespace-nowrap sticky left-[10.25rem] sm:left-[11.25rem] z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[4.5rem] sm:min-w-[5rem] cursor-pointer select-none hover:text-white transition-colors"
                         onClick={() => {
                           setSort48hScore((prev) => {
                             if (prev === 'none') return 'desc'
@@ -477,7 +479,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                         }}
                         title="Clique para ordenar por Score"
                       >
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center justify-center gap-1 w-full">
                           <span>Score</span>
                           {sort48hScore === 'desc' && (
                             <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
@@ -490,15 +492,14 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           )}
                         </div>
                       </th>
-                      <th className="p-3 text-center min-w-[3.5rem]">Céu</th>
-                      <th className="p-3">Vento (kt)</th>
-                      <th className="p-3">Rajada (kt)</th>
-                      <th className="p-3">Direção</th>
-                      <th className="p-3">Onda (m)</th>
-                      <th className="p-3">Período (s)</th>
-                      <th className="p-3">Maré (m)</th>
-                      <th className="p-3">Chuva (mm/h)</th>
-                      <th className="p-3">Temp (°C)</th>
+                      <th className="p-3 whitespace-nowrap">Vento (kt)</th>
+                      <th className="p-3 whitespace-nowrap">Rajada (kt)</th>
+                      <th className="p-3 whitespace-nowrap">Direção</th>
+                      <th className="p-3 whitespace-nowrap">Onda (m)</th>
+                      <th className="p-3 whitespace-nowrap">Período (s)</th>
+                      <th className="p-3 whitespace-nowrap">Maré (m)</th>
+                      <th className="p-3 whitespace-nowrap">Chuva (mm/h)</th>
+                      <th className="p-3 whitespace-nowrap">Temp (°C)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
@@ -540,22 +541,31 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           key={idx}
                           className="hover:bg-[#1c2430] transition-colors text-zinc-200 group"
                         >
-                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                          <td className="p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5.25rem] sm:min-w-[5.75rem]">
                             {formatHoraTabela(item.time)}
                           </td>
-                          <td className="p-3 font-sans whitespace-nowrap sticky left-[90px] sm:left-[105px] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                          <td className="p-3 font-sans whitespace-nowrap text-center sticky left-[5.25rem] sm:left-[5.75rem] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5rem] sm:min-w-[5.5rem]">
+                            <div
+                              className="inline-flex items-center justify-center cursor-help"
+                              role="img"
+                              aria-label={sky.label}
+                              title={sky.label}
+                            >
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-6 h-6 shrink-0"
+                              />
+                            </div>
+                          </td>
+                          <td className="p-3 font-sans whitespace-nowrap text-center sticky left-[10.25rem] sm:left-[11.25rem] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[4.5rem] sm:min-w-[5rem]">
                             {scoreResult.hasData && scoreResult.score !== null ? (
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
-                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-sans text-xs font-semibold cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                    className={`inline-flex items-center justify-center min-w-[2.75rem] px-2 py-0.5 rounded-full border font-sans text-xs font-bold tabular-nums cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
                                   >
                                     <span>{scoreResult.score.toFixed(1)}</span>
-                                    <span className="text-[10px] font-normal opacity-90">
-                                      {scoreResult.faixa}
-                                    </span>
-                                    <Info className="w-2.5 h-2.5 opacity-70 ml-0.5" />
                                   </button>
                                 </PopoverTrigger>
                                 <PopoverContent
@@ -567,7 +577,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                                     <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
                                       <span className="font-bold text-white flex items-center gap-1.5">
                                         <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                                        Como calculamos
+                                        Score: {scoreResult.faixa}
                                       </span>
                                       <Badge
                                         variant="outline"
@@ -607,29 +617,19 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                               <span className="text-zinc-500 font-mono">—</span>
                             )}
                           </td>
-                          <td className="p-3 font-sans whitespace-nowrap text-center min-w-[3.5rem]">
-                            <div
-                              className="inline-flex items-center justify-center cursor-help"
-                              role="img"
-                              aria-label={sky.label}
-                              title={sky.label}
-                            >
-                              <SkyConditionIcon
-                                iconName={sky.iconName}
-                                className="w-5 h-5 shrink-0"
-                              />
-                            </div>
-                          </td>
-                          <td className="p-3 font-bold text-sky-300">{vento}</td>
-                          <td className="p-3 text-amber-400">{raj}</td>
-                          <td className="p-3 font-sans flex items-center gap-1 text-zinc-300">
+                          <td className="p-3 font-bold text-sky-300 whitespace-nowrap">{vento}</td>
+                          <td className="p-3 text-amber-400 whitespace-nowrap">{raj}</td>
+                          <td className="p-3 font-sans flex items-center gap-1 text-zinc-300 whitespace-nowrap">
                             <Compass
                               className="w-3 h-3 text-sky-400 shrink-0"
                               style={{ transform: `rotate(${item.wind_direction_10m ?? 0}deg)` }}
                             />
                             {dirLabel}
                           </td>
-                          <td className="p-3 text-cyan-300 font-bold" title={tooltipOnda}>
+                          <td
+                            className="p-3 text-cyan-300 font-bold whitespace-nowrap"
+                            title={tooltipOnda}
+                          >
                             <span className="inline-flex items-center gap-1">
                               <span>{onda}</span>
                               {isAjustado && (
@@ -643,10 +643,10 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                               )}
                             </span>
                           </td>
-                          <td className="p-3 text-zinc-400">{per}</td>
-                          <td className="p-3 text-indigo-300">{mare}</td>
-                          <td className="p-3 text-zinc-400">{chuva}</td>
-                          <td className="p-3 text-zinc-300">{temp}°</td>
+                          <td className="p-3 text-zinc-400 whitespace-nowrap">{per}</td>
+                          <td className="p-3 text-indigo-300 whitespace-nowrap">{mare}</td>
+                          <td className="p-3 text-zinc-400 whitespace-nowrap">{chuva}</td>
+                          <td className="p-3 text-zinc-300 whitespace-nowrap">{temp}°</td>
                         </tr>
                       )
                     })}
@@ -668,11 +668,14 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
-                      <th className="p-3 sticky left-0 z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)]">
+                      <th className="p-3 whitespace-nowrap sticky left-0 z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[7rem] sm:min-w-[8rem]">
                         Data / Dia
                       </th>
+                      <th className="p-3 text-center whitespace-nowrap sticky left-[7rem] sm:left-[8rem] z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5rem] sm:min-w-[5.5rem]">
+                        Condição
+                      </th>
                       <th
-                        className="p-3 sticky left-[110px] sm:left-[130px] z-10 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] cursor-pointer select-none hover:text-white transition-colors"
+                        className="p-3 text-center whitespace-nowrap sticky left-[12rem] sm:left-[13.5rem] z-20 bg-[#0f141c] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[4.5rem] sm:min-w-[5rem] cursor-pointer select-none hover:text-white transition-colors"
                         onClick={() => {
                           setSort7diasScore((prev) => {
                             if (prev === 'none') return 'desc'
@@ -682,7 +685,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                         }}
                         title="Clique para ordenar por Score"
                       >
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center justify-center gap-1 w-full">
                           <span>Score</span>
                           {sort7diasScore === 'desc' && (
                             <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
@@ -695,11 +698,10 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           )}
                         </div>
                       </th>
-                      <th className="p-3 text-center min-w-[3.5rem]">Céu</th>
-                      <th className="p-3">Temp</th>
-                      <th className="p-3">Vento Máx</th>
-                      <th className="p-3">Onda Máx</th>
-                      <th className="p-3">Chuva Total</th>
+                      <th className="p-3 whitespace-nowrap">Temp</th>
+                      <th className="p-3 whitespace-nowrap">Vento Máx</th>
+                      <th className="p-3 whitespace-nowrap">Onda Máx</th>
+                      <th className="p-3 whitespace-nowrap">Chuva Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
@@ -717,7 +719,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           }`}
                         >
                           <td
-                            className={`p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
+                            className={`p-3 font-sans font-medium text-white whitespace-nowrap sticky left-0 z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[7rem] sm:min-w-[8rem] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
                           >
                             <span className="flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -730,20 +732,31 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             </span>
                           </td>
                           <td
-                            className={`p-3 font-sans whitespace-nowrap sticky left-[110px] sm:left-[130px] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
+                            className={`p-3 font-sans whitespace-nowrap text-center sticky left-[7rem] sm:left-[8rem] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[5rem] sm:min-w-[5.5rem] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
+                          >
+                            <div
+                              className="inline-flex items-center justify-center cursor-help"
+                              role="img"
+                              aria-label={sky.label}
+                              title={sky.label}
+                            >
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-6 h-6 shrink-0"
+                              />
+                            </div>
+                          </td>
+                          <td
+                            className={`p-3 font-sans whitespace-nowrap text-center sticky left-[12rem] sm:left-[13.5rem] z-10 bg-[#161c24] group-hover:bg-[#1c2430] shadow-[1px_0_0_0_rgba(39,39,42,0.8)] min-w-[4.5rem] sm:min-w-[5rem] ${dia.isHoje ? 'bg-[#142330]' : ''}`}
                           >
                             {scoreResult.hasData && scoreResult.score !== null ? (
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
-                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-sans text-xs font-semibold cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                    className={`inline-flex items-center justify-center min-w-[2.75rem] px-2 py-0.5 rounded-full border font-sans text-xs font-bold tabular-nums cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
                                   >
                                     <span>{scoreResult.score.toFixed(1)}</span>
-                                    <span className="text-[10px] font-normal opacity-90">
-                                      {scoreResult.faixa}
-                                    </span>
-                                    <Info className="w-2.5 h-2.5 opacity-70 ml-0.5" />
                                   </button>
                                 </PopoverTrigger>
                                 <PopoverContent
@@ -755,7 +768,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                                     <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
                                       <span className="font-bold text-white flex items-center gap-1.5">
                                         <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                                        Como calculamos
+                                        Score: {scoreResult.faixa}
                                       </span>
                                       <Badge
                                         variant="outline"
@@ -794,19 +807,6 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                             ) : (
                               <span className="text-zinc-500 font-mono">—</span>
                             )}
-                          </td>
-                          <td className="p-3 font-sans whitespace-nowrap text-center min-w-[3.5rem]">
-                            <div
-                              className="inline-flex items-center justify-center cursor-help"
-                              role="img"
-                              aria-label={sky.label}
-                              title={sky.label}
-                            >
-                              <SkyConditionIcon
-                                iconName={sky.iconName}
-                                className="w-5 h-5 shrink-0"
-                              />
-                            </div>
                           </td>
                           <td className="p-3 whitespace-nowrap font-mono">
                             {dia.temperaturaMax !== null && dia.temperaturaMax !== undefined ? (
