@@ -1136,8 +1136,8 @@ export function getWeatherCondition(code: number | null | undefined): {
 } {
   if (code === null || code === undefined || isNaN(code)) {
     return {
-      iconName: 'CloudOff',
-      label: '—',
+      iconName: 'Cloud',
+      label: 'Nublado',
       labelColor: 'text-zinc-400',
       isStorm: false,
     }

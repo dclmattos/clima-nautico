@@ -490,7 +490,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           )}
                         </div>
                       </th>
-                      <th className="p-3">Céu</th>
+                      <th className="p-3 text-center min-w-[3.5rem]">Céu</th>
                       <th className="p-3">Vento (kt)</th>
                       <th className="p-3">Rajada (kt)</th>
                       <th className="p-3">Direção</th>
@@ -607,7 +607,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                               <span className="text-zinc-500 font-mono">—</span>
                             )}
                           </td>
-                          <td className="p-3 font-sans whitespace-nowrap">
+                          <td className="p-3 font-sans whitespace-nowrap text-center min-w-[3.5rem]">
                             <div
                               className="inline-flex items-center justify-center cursor-help"
                               role="img"
@@ -695,7 +695,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                           )}
                         </div>
                       </th>
-                      <th className="p-3">Céu</th>
+                      <th className="p-3 text-center min-w-[3.5rem]">Céu</th>
                       <th className="p-3">Temp</th>
                       <th className="p-3">Vento Máx</th>
                       <th className="p-3">Onda Máx</th>
@@ -795,7 +795,7 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
                               <span className="text-zinc-500 font-mono">—</span>
                             )}
                           </td>
-                          <td className="p-3 font-sans whitespace-nowrap">
+                          <td className="p-3 font-sans whitespace-nowrap text-center min-w-[3.5rem]">
                             <div
                               className="inline-flex items-center justify-center cursor-help"
                               role="img"
