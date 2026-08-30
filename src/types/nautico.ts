@@ -218,6 +218,13 @@ export interface ResumoDiaResultado {
   atualizado_em: string
 }
 
+export interface TravessiaPontoParamCustom {
+  lat: number
+  lon: number
+  tipo?: string
+  nome?: string
+}
+
 export interface TravessiaParams {
   origem: string
   destino: string
@@ -226,6 +233,8 @@ export interface TravessiaParams {
   perfil_id?: string
   consumo_lh?: number
   dispositivo_uuid?: string
+  origemCustom?: TravessiaPontoParamCustom
+  destinoCustom?: TravessiaPontoParamCustom
 }
 
 export interface PrevisaoPayload {

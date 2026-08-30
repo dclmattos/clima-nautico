@@ -320,6 +320,23 @@ export default function TravessiaPage() {
       const velNumber = velocidadeNos ? parseFloat(velocidadeNos) : velocidadePadrao
       const consumoNumber = consumoLh ? parseFloat(consumoLh) : undefined
 
+      // Detecta se origem ou destino são pontos personalizados do localStorage
+      const customList = getPontosPersonalizados()
+      const cpOrigem = customList.find(
+        (p) =>
+          p.id === origem ||
+          `custom-${p.id}` === origem ||
+          (origem.startsWith('custom:') &&
+            `custom:${p.lat.toFixed(3)}:${p.lon.toFixed(3)}` === origem),
+      )
+      const cpDestino = customList.find(
+        (p) =>
+          p.id === destino ||
+          `custom-${p.id}` === destino ||
+          (destino.startsWith('custom:') &&
+            `custom:${p.lat.toFixed(3)}:${p.lon.toFixed(3)}` === destino),
+      )
+
       try {
         const res = await fetchCalculoTravessia({
           origem,
@@ -329,13 +346,35 @@ export default function TravessiaPage() {
           perfil_id: perfil?.id || 'lancha',
           consumo_lh: consumoNumber,
           dispositivo_uuid: deviceId,
+          origemCustom: cpOrigem
+            ? {
+                lat: cpOrigem.lat,
+                lon: cpOrigem.lon,
+                tipo: cpOrigem.tipo,
+                nome: cpOrigem.nome,
+              }
+            : undefined,
+          destinoCustom: cpDestino
+            ? {
+                lat: cpDestino.lat,
+                lon: cpDestino.lon,
+                tipo: cpDestino.tipo,
+                nome: cpDestino.nome,
+              }
+            : undefined,
         })
 
         setResultado(res)
       } catch (err: any) {
         console.error('Erro ao calcular travessia:', err)
         const msg = err?.message || ''
-        if (msg.toLowerCase().includes('em terra')) {
+        if (msg.toLowerCase().includes('sem dados de mar')) {
+          toast({
+            title: 'Sem dados marítimos',
+            description: msg,
+            variant: 'destructive',
+          })
+        } else if (msg.toLowerCase().includes('em terra')) {
           toast({
             title: 'Posição em terra',
             description: 'Esta posição parece estar em terra — ajuste para o mar.',
@@ -345,6 +384,7 @@ export default function TravessiaPage() {
           toast({
             title: 'Erro no cálculo',
             description:
+              msg ||
               'Não foi possível calcular a travessia. Verifique os pontos e tente novamente.',
             variant: 'destructive',
           })

@@ -1,19 +1,15 @@
 // Hook travessia.js
 // Obs: No PocketBase JSVM, cada callback roda em escopo isolado.
-// Toda a lógica e estruturas globais como globalThis devem ser acessadas/declaradas inline.
+// Toda a lógica e estruturas devem ser declaradas inline dentro do callback do routerAdd.
 
 routerAdd('GET', '/backend/v1/travessia', (e) => {
   const query = e.requestInfo().query || {}
-  const origemParam = query['origem']
-  const destinoParam = query['destino']
+  const origemParam = query['origem'] || query['origem_id'] || query['ponto_origem_id']
+  const destinoParam = query['destino'] || query['destino_id'] || query['ponto_destino_id']
   const horaSaidaParam = query['hora_saida']
   const velocidadeParam = query['velocidade_nos']
   const perfilIdParam = query['perfil_id']
   const consumoLhParam = query['consumo_lh']
-
-  if (!origemParam || !destinoParam) {
-    return e.json(400, { error: "Parâmetros 'origem' e 'destino' são obrigatórios" })
-  }
 
   // 1. Resolver Perfil de Navegação (para limites de score e velocidade padrão)
   let perfilRecord = null
@@ -63,7 +59,14 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     return 1.0 // mar_aberto
   }
 
-  // Helper para resolver um ponto (slug ou custom:lat:lon ou lat,lon)
+  const normalizarTipoString = (tipo) => {
+    const raw = (tipo || '').trim().toLowerCase()
+    if (raw === 'semi' || raw === 'semi-abrigado' || raw === 'semi_abrigado') return 'semi-abrigado'
+    if (raw === 'aberto' || raw === 'mar aberto' || raw === 'mar-aberto' || raw === 'mar_aberto')
+      return 'mar_aberto'
+    return 'abrigado'
+  }
+
   const PONTOS_FIXOS_LIST = [
     { slug: 'angra', nome: 'Angra dos Reis', lat: -23.0067, lon: -44.318, tipo: 'abrigado' },
     {
@@ -77,26 +80,57 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     { slug: 'juatinga', nome: 'Juatinga', lat: -23.2833, lon: -44.5833, tipo: 'mar_aberto' },
   ]
 
-  const normalizarTipoString = (tipo) => {
-    const raw = (tipo || '').trim().toLowerCase()
-    if (raw === 'semi' || raw === 'semi-abrigado' || raw === 'semi_abrigado') return 'semi-abrigado'
-    if (raw === 'aberto' || raw === 'mar aberto' || raw === 'mar-aberto' || raw === 'mar_aberto')
-      return 'mar_aberto'
-    return 'abrigado'
-  }
+  // Helper para resolver uma extremidade (origem ou destino), seja fixa ou personalizada
+  const resolveExtremidade = (prefix, mainParamVal, defaultNome) => {
+    const latParam = query[prefix + '_lat'] || query['lat_' + prefix]
+    const lonParam = query[prefix + '_lon'] || query['lon_' + prefix]
+    const tipoParam = query[prefix + '_tipo'] || query['tipo_' + prefix]
+    const nomeParam = query[prefix + '_nome'] || query['nome_' + prefix]
 
-  const resolvePonto = (param, defaultNome) => {
-    const pStr = (param || '').trim()
+    // 1. Coordenadas explícitas via parâmetros lat/lon
+    if (
+      latParam !== undefined &&
+      latParam !== null &&
+      lonParam !== undefined &&
+      lonParam !== null &&
+      String(latParam).trim() !== '' &&
+      String(lonParam).trim() !== ''
+    ) {
+      const parsedLat = parseFloat(latParam)
+      const parsedLon = parseFloat(lonParam)
+      if (!isNaN(parsedLat) && !isNaN(parsedLon)) {
+        const lat3 = parsedLat.toFixed(3)
+        const lon3 = parsedLon.toFixed(3)
+        const pTipo = normalizarTipoString(tipoParam)
+        const pNome = (nomeParam || '').trim() || defaultNome || 'Ponto Personalizado'
+        return {
+          slug: 'custom:' + lat3 + ':' + lon3,
+          nome: pNome,
+          lat: parsedLat,
+          lon: parsedLon,
+          tipo: pTipo,
+        }
+      }
+    }
+
+    // 2. Parâmetro principal (origemParam ou destinoParam)
+    const pStr = (mainParamVal || '').trim()
+    if (!pStr) return null
+
+    // 2a. Ponto personalizado no formato custom:lat:lon ou custom:lat:lon:tipo
     if (pStr.startsWith('custom:')) {
       const parts = pStr.split(':')
       if (parts.length >= 3) {
         const pLat = parseFloat(parts[1])
         const pLon = parseFloat(parts[2])
-        const pTipo = parts[3] ? normalizarTipoString(parts[3]) : 'abrigado'
+        const pTipo = parts[3] ? normalizarTipoString(parts[3]) : normalizarTipoString(tipoParam)
         if (!isNaN(pLat) && !isNaN(pLon)) {
+          const lat3 = pLat.toFixed(3)
+          const lon3 = pLon.toFixed(3)
+          const pNome = (nomeParam || '').trim() || defaultNome || 'Ponto Personalizado'
           return {
-            slug: 'custom:' + pLat.toFixed(3) + ':' + pLon.toFixed(3),
-            nome: defaultNome || 'Ponto Personalizado',
+            slug: 'custom:' + lat3 + ':' + lon3,
+            nome: pNome,
             lat: pLat,
             lon: pLon,
             tipo: pTipo,
@@ -105,7 +139,26 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       }
     }
 
-    // Busca nos pontos fixos conhecidos
+    // 2b. Formato lat,lon
+    if (pStr.includes(',')) {
+      const parts = pStr.split(',')
+      const pLat = parseFloat(parts[0])
+      const pLon = parseFloat(parts[1])
+      if (!isNaN(pLat) && !isNaN(pLon)) {
+        const lat3 = pLat.toFixed(3)
+        const lon3 = pLon.toFixed(3)
+        const pNome = (nomeParam || '').trim() || defaultNome || 'Ponto Personalizado'
+        return {
+          slug: 'custom:' + lat3 + ':' + lon3,
+          nome: pNome,
+          lat: pLat,
+          lon: pLon,
+          tipo: normalizarTipoString(tipoParam),
+        }
+      }
+    }
+
+    // 2c. Busca nos 4 pontos fixos canônicos
     const low = pStr.toLowerCase()
     for (let i = 0; i < PONTOS_FIXOS_LIST.length; i++) {
       if (
@@ -113,16 +166,22 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
         PONTOS_FIXOS_LIST[i].nome.toLowerCase() === low ||
         (low === 'abraão' && PONTOS_FIXOS_LIST[i].slug === 'abraao')
       ) {
-        return PONTOS_FIXOS_LIST[i]
+        return {
+          slug: PONTOS_FIXOS_LIST[i].slug,
+          nome: (nomeParam || '').trim() || PONTOS_FIXOS_LIST[i].nome,
+          lat: PONTOS_FIXOS_LIST[i].lat,
+          lon: PONTOS_FIXOS_LIST[i].lon,
+          tipo: PONTOS_FIXOS_LIST[i].tipo,
+        }
       }
     }
 
-    // Busca no banco PocketBase
+    // 2d. Busca no banco de dados PocketBase (collection 'pontos')
     try {
       const rec = $app.findRecordById('pontos', pStr)
       return {
         slug: rec.get('slug') || rec.id,
-        nome: rec.get('nome'),
+        nome: (nomeParam || '').trim() || rec.get('nome'),
         lat: Number(rec.get('lat')),
         lon: Number(rec.get('lon')),
         tipo: normalizarTipoString(rec.get('tipo')),
@@ -132,7 +191,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
         const rec = $app.findFirstRecordByData('pontos', 'slug', pStr)
         return {
           slug: rec.get('slug') || rec.id,
-          nome: rec.get('nome'),
+          nome: (nomeParam || '').trim() || rec.get('nome'),
           lat: Number(rec.get('lat')),
           lon: Number(rec.get('lon')),
           tipo: normalizarTipoString(rec.get('tipo')),
@@ -142,7 +201,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
           const rec = $app.findFirstRecordByData('pontos', 'nome', pStr)
           return {
             slug: rec.get('slug') || rec.id,
-            nome: rec.get('nome'),
+            nome: (nomeParam || '').trim() || rec.get('nome'),
             lat: Number(rec.get('lat')),
             lon: Number(rec.get('lon')),
             tipo: normalizarTipoString(rec.get('tipo')),
@@ -151,31 +210,19 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       }
     }
 
-    // Tenta formato lat,lon
-    if (pStr.includes(',')) {
-      const parts = pStr.split(',')
-      const pLat = parseFloat(parts[0])
-      const pLon = parseFloat(parts[1])
-      if (!isNaN(pLat) && !isNaN(pLon)) {
-        return {
-          slug: 'custom:' + pLat.toFixed(3) + ':' + pLon.toFixed(3),
-          nome: defaultNome || 'Ponto Personalizado',
-          lat: pLat,
-          lon: pLon,
-          tipo: 'abrigado',
-        }
-      }
-    }
-
     return null
   }
 
-  const pontoOrigem = resolvePonto(origemParam, 'Origem')
-  const pontoDestino = resolvePonto(destinoParam, 'Destino')
+  const pontoOrigem = resolveExtremidade('origem', origemParam, 'Origem')
+  const pontoDestino = resolveExtremidade('destino', destinoParam, 'Destino')
 
   if (!pontoOrigem || !pontoDestino) {
     return e.json(400, {
-      error: 'Origem ou destino inválidos: ' + (!pontoOrigem ? origemParam : destinoParam),
+      error:
+        'Origem ou destino inválidos: ' +
+        (!pontoOrigem
+          ? origemParam || 'origem não informada'
+          : destinoParam || 'destino não informado'),
     })
   }
 
@@ -205,7 +252,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   const SAO_PAULO_OFFSET_MINUTES = -180 // -03:00
 
   // Converte timestamp em milissegundos para string ISO com offset America/Sao_Paulo (-03:00)
-  // Ex: 1787832000000 -> "2026-08-27T08:00:00-03:00"
   const formatIsoSaoPaulo = (ms) => {
     const d = new Date(ms + SAO_PAULO_OFFSET_MINUTES * 60 * 1000)
     const pad = (n) => (n < 10 ? '0' + n : '' + n)
@@ -218,8 +264,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     return y + '-' + m + '-' + day + 'T' + h + ':' + min + ':' + s + '-03:00'
   }
 
-  // Parser robusto para hora de saída recebida
-  // Se vier no formato YYYY-MM-DDTHH:MM sem offset, interpreta explicitamente como America/Sao_Paulo (-03:00)
+  // Parser para hora de saída recebida
   const parseDateSaoPaulo = (str) => {
     if (!str) return Date.now()
     let s = String(str).trim()
@@ -243,11 +288,13 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   const meioIso = formatIsoSaoPaulo(meioMs)
   const etaIso = formatIsoSaoPaulo(etaMs)
 
-  // 4. Ponto Médio
+  // 4. Ponto Médio (sempre chave no formato custom:{lat}:{lon} com 3 casas decimais)
   const meioLat = (pontoOrigem.lat + pontoDestino.lat) / 2
   const meioLon = (pontoOrigem.lon + pontoDestino.lon) / 2
+  const meioLat3 = meioLat.toFixed(3)
+  const meioLon3 = meioLon.toFixed(3)
   const pontoMeio = {
-    slug: 'custom:' + meioLat.toFixed(3) + ':' + meioLon.toFixed(3),
+    slug: 'custom:' + meioLat3 + ':' + meioLon3,
     nome: 'Ponto Médio',
     lat: meioLat,
     lon: meioLon,
@@ -255,10 +302,16 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   }
 
   // Helper para obter dados de previsão com Cache UPSERT 30min
+  // Chave de cache para coordenadas sempre no formato custom:{lat}:{lon} com 3 casas decimais
   const getPrevisaoData = (pt) => {
-    const cachePontoKey = pt.slug.startsWith('custom:')
-      ? pt.slug
-      : pt.slug || 'custom:' + pt.lat.toFixed(3) + ':' + pt.lon.toFixed(3)
+    let cachePontoKey = ''
+    if (pt.slug && !pt.slug.startsWith('custom:') && !pt.slug.startsWith('custom-')) {
+      cachePontoKey = pt.slug
+    } else {
+      const lat3 = Number(pt.lat).toFixed(3)
+      const lon3 = Number(pt.lon).toFixed(3)
+      cachePontoKey = 'custom:' + lat3 + ':' + lon3
+    }
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString().replace('T', ' ')
 
     try {
@@ -271,13 +324,13 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       )
       if (cachedRecords && cachedRecords.length > 0) {
         const payload = cachedRecords[0].get('payload')
-        if (payload && payload.hourly) {
+        if (payload && payload.hourly && payload.hourly.length > 0) {
           return payload
         }
       }
     } catch (_) {}
 
-    // Busca Open-Meteo
+    // Consulta Open-Meteo
     const weatherUrl =
       'https://api.open-meteo.com/v1/forecast?latitude=' +
       encodeURIComponent(pt.lat) +
@@ -311,7 +364,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     }
 
     if (!mRes || mRes.statusCode === 400 || mRes.statusCode === 404 || mRes.statusCode === 422) {
-      return { _terraError: true }
+      return { _noMarineData: true, pontoNome: pt.nome }
     }
     if (mRes.statusCode !== 200) return null
 
@@ -319,10 +372,27 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const mData = mRes.json
     if (!wData || !wData.hourly || !wData.hourly.time) return null
 
-    const mTimes = mData && mData.hourly ? mData.hourly.time || [] : []
-    const mWaveHeight = mData && mData.hourly ? mData.hourly.wave_height || [] : []
-    const mWavePeriod = mData && mData.hourly ? mData.hourly.wave_period || [] : []
-    const mSwellWaveHeight = mData && mData.hourly ? mData.hourly.swell_wave_height || [] : []
+    const mHourly = mData && mData.hourly ? mData.hourly : null
+    if (!mHourly || !mHourly.time || mHourly.time.length === 0) {
+      return { _noMarineData: true, pontoNome: pt.nome }
+    }
+
+    const mTimes = mHourly.time || []
+    const mWaveHeight = mHourly.wave_height || []
+    const mWavePeriod = mHourly.wave_period || []
+    const mSwellWaveHeight = mHourly.swell_wave_height || []
+
+    // Verifica se há dados reais de onda (se todos os valores forem nulos, coordenada sem dado marinho)
+    let temDadoMar = false
+    for (let i = 0; i < mWaveHeight.length; i++) {
+      if (mWaveHeight[i] !== null && mWaveHeight[i] !== undefined && !isNaN(mWaveHeight[i])) {
+        temDadoMar = true
+        break
+      }
+    }
+    if (!temDadoMar) {
+      return { _noMarineData: true, pontoNome: pt.nome }
+    }
 
     const fatorAbrigoPt = getFatorAbrigo(pt.tipo)
     const isWaveAjustado = fatorAbrigoPt < 1.0
@@ -397,7 +467,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       daily: dailyList,
     }
 
-    // Salva no cache
+    // Salva no cache_previsao via UPSERT
     const nowIso = new Date().toISOString().replace('T', ' ')
     try {
       const existing = $app.findFirstRecordByData('cache_previsao', 'ponto_id', cachePontoKey)
@@ -419,12 +489,23 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   }
 
   const prevOrigem = getPrevisaoData(pontoOrigem)
-  const prevMeio = getPrevisaoData(pontoMeio)
-  const prevDestino = getPrevisaoData(pontoDestino)
-
-  if (prevOrigem?._terraError || prevMeio?._terraError || prevDestino?._terraError) {
+  if (prevOrigem && prevOrigem._noMarineData) {
     return e.json(400, {
-      error: 'esta posição parece estar em terra — ajuste para o mar',
+      error: 'sem dados de mar para ' + pontoOrigem.nome,
+    })
+  }
+
+  const prevMeio = getPrevisaoData(pontoMeio)
+  if (prevMeio && prevMeio._noMarineData) {
+    return e.json(400, {
+      error: 'sem dados de mar para Ponto Médio',
+    })
+  }
+
+  const prevDestino = getPrevisaoData(pontoDestino)
+  if (prevDestino && prevDestino._noMarineData) {
+    return e.json(400, {
+      error: 'sem dados de mar para ' + pontoDestino.nome,
     })
   }
 
@@ -434,7 +515,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     })
   }
 
-  // Helper para buscar a hora mais próxima em uma lista horária (Open-Meteo retorna 'YYYY-MM-DDTHH:00' na timezone America/Sao_Paulo)
+  // Helper para buscar a hora mais próxima em uma lista horária
   const findHourlyAt = (hourlyList, targetIso) => {
     if (!hourlyList || hourlyList.length === 0) return null
     const targetMs = parseDateSaoPaulo(targetIso)
@@ -452,7 +533,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   }
 
   // Helper para calcular a direção relativa do vento em relação ao rumo (0 a 180 de diferença angular)
-  // "proa" se vento vindo de ±45° do rumo, "través" se ±45°–±135°, "popa" se > ±135°
   const getDirecaoRelativa = (direcaoVentoDeg, rumoDeg) => {
     if (direcaoVentoDeg === null || direcaoVentoDeg === undefined || isNaN(direcaoVentoDeg)) {
       return 'través'
@@ -469,7 +549,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     }
   }
 
-  // Helper para calcular o score náutico (seguindo janelas.js)
+  // Helper para calcular o score náutico
   const calcularScoreItem = (item, pontoTipo) => {
     if (!item) return { score: 50, fatorLimitante: null }
     const windSpeed = item.wind_speed_10m !== null ? item.wind_speed_10m : 0
@@ -662,7 +742,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     horaLimiteSaidaIso = formatIsoSaoPaulo(maxSaidaMs)
   }
 
-  // Função unificada para consolidar alertas por tipo (ex: onda_traves, vento_proa, chegada_noturna, etc.)
+  // Função unificada para consolidar alertas por tipo (ex: onda_traves, vento_proa, chegada_noturna)
   const consolidarAlertas = (amostrasList, isNoite) => {
     const rawAlertas = []
 
@@ -723,7 +803,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       }
     })
 
-    // Monta mensagens consolidadas legíveis e array de alertas estruturados
     const mensagensConsolidadas = []
     const alertasConsolidados = []
 
@@ -786,7 +865,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       avisoMsg = 'chegada noturna'
     }
 
-    // Fator limitante mais expressivo
     const allLimiters = [
       amostrasList[0].fator_limitante,
       amostrasList[1].fator_limitante,
@@ -826,15 +904,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     combustivelComReserva = Math.round(combustivelLitros * 1.2 * 10) / 10
   }
 
-  // 9. Varredura de Alternativas
-  // Regras:
-  // (a) Usar a MESMA função de veredito completo (calcularVereditoCompleto)
-  // (b) Excluir a hora de saída original da varredura (hStep = 1..24 garante offset > 0)
-  // (c) Só sugerir alternativa se for ESTRITAMENTE MELHOR que a travessia original:
-  //     Qualidade: verde > amarelo > vermelho.
-  //     Em empate de cor, comparar pelo score mínimo entre as 3 amostras (maior score mínimo vence).
-  //     Se nenhum candidato for estritamente melhor, melhorAlternativa = null.
-
+  // 9. Varredura de Alternativas (funciona de forma idêntica para qualquer combinação fixo/personalizado)
   const rankVeredito = (ver) => {
     if (ver === 'verde') return 3
     if (ver === 'amarelo') return 2
@@ -844,7 +914,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   const principalRank = rankVeredito(veredito)
   const principalMinScore = vereditoPrincipal.minScore
 
-  // Função comparadora: retorna true se candidate for estritamente melhor que target
   const isEstritamenteMelhor = (candRank, candMinScore, baseRank, baseMinScore) => {
     if (candRank > baseRank) return true
     if (candRank === baseRank && candMinScore > baseMinScore) return true
@@ -856,31 +925,19 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
   let bestRank = principalRank
   let bestMinScore = principalMinScore
 
-  // Regra de alternativas:
-  // (a) Considerar apenas saídas em que a chegada (ETA) ocorra entre o nascer (sunrise) e o pôr do sol (sunset) reais do destino.
-  // (b) Janela inicial de busca: próximas 24h a partir de agora (America/Sao_Paulo).
-  // (c) Se não houver nenhuma saída válida dentro das próximas 24 h, estender a busca para o dia seguinte, até no máximo 24 h à frente (ou seja, até +48 h contadas a partir de agora em America/Sao_Paulo).
-  // (d) A hora original de saída continua excluída da varredura.
-  // (e) O veredito completo (vento de proa, onda de través, chegada noturna) continua sendo aplicado a cada candidata.
-  // (f) Só sugerir alternativa se for ESTRITAMENTE MELHOR que a travessia original.
-
   const currentNowMs = Date.now()
-  // Próxima hora cheia calculada em America/Sao_Paulo (-03:00)
   const localNowMs = currentNowMs + SAO_PAULO_OFFSET_MINUTES * 60 * 1000
   const localDate = new Date(localNowMs)
   const localMinutes = localDate.getUTCMinutes()
   const localSeconds = localDate.getUTCSeconds()
   const localMsRemaining = (60 - localMinutes) * 60 * 1000 - localSeconds * 1000
 
-  // Se já está exatamente no minuto 0 segundo 0, soma 1 hora para ser estritamente posterior
   const msToNextHour = localMsRemaining <= 0 ? 3600 * 1000 : localMsRemaining
   const firstCandidateMs = currentNowMs + msToNextHour
   const window24hMs = currentNowMs + 24 * 3600 * 1000
   const maxSearchHorizonMs = currentNowMs + 48 * 3600 * 1000
 
-  // Helper para testar um candidato de saída e retornar se atende à janela de luz e seu veredito
   const avaliarCandidato = (candSaidaMs) => {
-    // Pula se coincidir com a saída original (dentro de 1 minuto)
     if (Math.abs(candSaidaMs - horaSaidaMs) < 60000) {
       return null
     }
@@ -892,7 +949,6 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const candMeioIso = formatIsoSaoPaulo(candMeioMs)
     const candEtaIso = formatIsoSaoPaulo(candEtaMs)
 
-    // Obter nascer e pôr do sol no destino para o dia da chegada (candEtaDate)
     const candEtaDate = candEtaIso.slice(0, 10)
     let candSunriseStr = null
     let candSunsetStr = null
@@ -904,18 +960,16 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
       }
     }
 
-    // Se não houver dia específico, fallback para o primeiro dia disponível
     if ((!candSunriseStr || !candSunsetStr) && dList.length > 0) {
       candSunriseStr = candSunriseStr || dList[0].sunrise
       candSunsetStr = candSunsetStr || dList[0].sunset
     }
 
-    // Checagem de luz solar: ETA deve ocorrer entre o nascer e o pôr do sol reais do destino
     if (candSunriseStr && candSunsetStr) {
       const candSunriseMs = parseDateSaoPaulo(candSunriseStr)
       const candSunsetMs = parseDateSaoPaulo(candSunsetStr)
       if (candEtaMs < candSunriseMs || candEtaMs > candSunsetMs) {
-        return null // Descartado: chegada fora do período diurno (antes do nascer ou após o pôr do sol)
+        return null
       }
     }
 
@@ -928,10 +982,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     const a3 = calcAmostra('destino', pontoDestino, candEtaIso, candHDestino)
     const candAmostras = [a1, a2, a3]
 
-    // candNoite é false porque já validamos candEtaMs <= candSunsetMs e >= candSunriseMs
     const candNoite = false
-
-    // Calcula veredito completo do candidato com as MESMAS regras da travessia principal
     const candVereditoObj = calcularVereditoCompleto(candAmostras, candNoite)
     const candRankVal = rankVeredito(candVereditoObj.veredito)
     const candMinScoreVal = candVereditoObj.minScore
@@ -950,7 +1001,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     }
   }
 
-  // 1ª Etapa: varredura nas primeiras 24 horas a partir de agora
+  // 1ª Etapa: varredura nas próximas 24 horas a partir de agora
   let candidatosValidos24hCount = 0
   for (let candMs = firstCandidateMs; candMs <= window24hMs; candMs += 3600 * 1000) {
     const candObj = avaliarCandidato(candMs)
@@ -964,8 +1015,7 @@ routerAdd('GET', '/backend/v1/travessia', (e) => {
     }
   }
 
-  // 2ª Etapa: Se não houver nenhuma saída válida (com ETA entre nascer e pôr do sol) dentro das próximas 24h,
-  // estende a busca para o dia seguinte, até no máximo 24h à frente (ou seja, até maxSearchHorizonMs = agora + 48h).
+  // 2ª Etapa: Se não houver saída válida nas primeiras 24h, estende a busca para até 48h
   if (candidatosValidos24hCount === 0) {
     const startNextDayMs = window24hMs + 3600 * 1000
     for (let candMs = startNextDayMs; candMs <= maxSearchHorizonMs; candMs += 3600 * 1000) {

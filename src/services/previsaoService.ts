@@ -318,8 +318,46 @@ export async function fetchCalculoTravessia(
   const backendUrl = pb.baseUrl || ''
   const queryParams = new URLSearchParams()
 
-  queryParams.set('origem', params.origem)
-  queryParams.set('destino', params.destino)
+  // Se a origem for personalizada
+  if (params.origemCustom) {
+    queryParams.set('origem_lat', String(params.origemCustom.lat))
+    queryParams.set('origem_lon', String(params.origemCustom.lon))
+    queryParams.set(
+      'origem_tipo',
+      normalizarTipoParaBackend(params.origemCustom.tipo || 'abrigado'),
+    )
+    if (params.origemCustom.nome) {
+      queryParams.set('origem_nome', params.origemCustom.nome)
+    }
+    queryParams.set(
+      'origem',
+      params.origem ||
+        `custom:${params.origemCustom.lat.toFixed(3)}:${params.origemCustom.lon.toFixed(3)}`,
+    )
+  } else {
+    queryParams.set('origem', params.origem)
+  }
+
+  // Se o destino for personalizado
+  if (params.destinoCustom) {
+    queryParams.set('destino_lat', String(params.destinoCustom.lat))
+    queryParams.set('destino_lon', String(params.destinoCustom.lon))
+    queryParams.set(
+      'destino_tipo',
+      normalizarTipoParaBackend(params.destinoCustom.tipo || 'abrigado'),
+    )
+    if (params.destinoCustom.nome) {
+      queryParams.set('destino_nome', params.destinoCustom.nome)
+    }
+    queryParams.set(
+      'destino',
+      params.destino ||
+        `custom:${params.destinoCustom.lat.toFixed(3)}:${params.destinoCustom.lon.toFixed(3)}`,
+    )
+  } else {
+    queryParams.set('destino', params.destino)
+  }
+
   queryParams.set('hora_saida', params.hora_saida)
   if (params.velocidade_nos) {
     queryParams.set('velocidade_nos', String(params.velocidade_nos))
