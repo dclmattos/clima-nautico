@@ -458,7 +458,217 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
 
             {/* ABA 1: TABELA 48 HORAS */}
             <TabsContent value="48h" className="space-y-3 m-0">
-              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
+              {/* Mobile (< sm): Seletor de ordenação e lista vertical de cartões */}
+              <div className="sm:hidden space-y-3">
+                <div className="flex items-center justify-between gap-2 bg-[#161c24] border border-zinc-800 rounded-lg p-2 text-xs">
+                  <span className="text-zinc-400 font-medium">Ordenar por:</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSort48hScore('none')}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        sort48hScore === 'none'
+                          ? 'bg-cyan-900/80 text-white border border-cyan-700/60'
+                          : 'bg-[#11161d] text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      Padrão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSort48hScore((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                        sort48hScore !== 'none'
+                          ? 'bg-cyan-900/80 text-white border border-cyan-700/60'
+                          : 'bg-[#11161d] text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      <span>Score</span>
+                      {sort48hScore === 'desc' && (
+                        <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
+                      )}
+                      {sort48hScore === 'asc' && <ArrowUp className="w-3.5 h-3.5 text-cyan-400" />}
+                      {sort48hScore === 'none' && <ArrowUpDown className="w-3 h-3 text-zinc-500" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {sortedForecast48h.map(({ item, scoreResult }, idx) => {
+                    const sky = getWeatherCondition(
+                      item.weather_code !== null && item.weather_code !== undefined
+                        ? item.weather_code
+                        : previsao.weather_code,
+                    )
+                    const vento =
+                      item.wind_speed_10m !== null ? Math.round(item.wind_speed_10m) : '--'
+                    const raj =
+                      item.wind_gusts_10m !== null ? Math.round(item.wind_gusts_10m) : '--'
+                    const dirLabel = getWindDirectionLabel(item.wind_direction_10m)
+                    const onda = item.wave_height !== null ? item.wave_height.toFixed(1) : '--'
+                    const per = item.wave_period !== null ? Math.round(item.wave_period) : '--'
+                    const mare =
+                      item.sea_level_height_msl !== null
+                        ? (item.sea_level_height_msl >= 0 ? '+' : '') +
+                          item.sea_level_height_msl.toFixed(2)
+                        : '--'
+                    const chuva =
+                      item.precipitation !== null ? item.precipitation.toFixed(1) : '0.0'
+                    const temp =
+                      item.temperature_2m !== null ? Math.round(item.temperature_2m) : '--'
+
+                    const isAjustado = !!item.wave_ajustado
+                    const ondaBruta =
+                      item.wave_height_bruto !== null && item.wave_height_bruto !== undefined
+                        ? item.wave_height_bruto.toFixed(1)
+                        : onda
+                    const fatorTxt = item.fator_abrigo ? `×${item.fator_abrigo}` : '×0,4'
+                    const tooltipOnda = isAjustado
+                      ? `Onda ajustada pelo fator de abrigo (${fatorTxt}). Valor bruto original: ${ondaBruta} m`
+                      : `Onda em mar aberto: ${onda} m`
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-xl bg-[#161c24] border border-zinc-800 space-y-2.5 min-w-0"
+                      >
+                        {/* Linha 1: Hora em destaque, ícone do céu com tooltip/aria-label, badge do score */}
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-bold text-white tracking-tight shrink-0 font-sans">
+                              {formatHoraTabela(item.time)}
+                            </span>
+                            <div
+                              className="inline-flex items-center gap-1.5 min-w-0 cursor-help"
+                              role="img"
+                              aria-label={sky.label}
+                              title={sky.label}
+                            >
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-5 h-5 shrink-0"
+                              />
+                              <span className={`text-xs truncate ${sky.labelColor}`}>
+                                {sky.label}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {scoreResult.hasData && scoreResult.score !== null ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`inline-flex items-center justify-center min-w-[2.75rem] px-2 py-0.5 rounded-full border font-sans text-xs font-bold tabular-nums cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                  >
+                                    <span>{scoreResult.score.toFixed(1)}</span>
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="end"
+                                  className="w-72 p-3 bg-[#11161d] border-zinc-700 text-zinc-100 text-xs shadow-2xl z-50 rounded-xl"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                                      <span className="font-bold text-white flex items-center gap-1.5">
+                                        <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                        Score: {scoreResult.faixa}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] px-1.5 py-0 ${scoreResult.badgeColor}`}
+                                      >
+                                        {scoreResult.score.toFixed(1)} · {scoreResult.faixa}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400 leading-tight">
+                                      Base de 10 pontos com penalidades pelo pior valor do período:
+                                    </p>
+                                    <div className="space-y-1 pt-1 font-mono text-[11px]">
+                                      {scoreResult.fatores.map((f, fIdx) => (
+                                        <div
+                                          key={fIdx}
+                                          className={`flex items-start justify-between p-1 rounded ${
+                                            f.penalidade < 0 || f.cap !== undefined
+                                              ? 'bg-zinc-800/60 text-zinc-200'
+                                              : 'text-zinc-400'
+                                          }`}
+                                        >
+                                          <span className="font-sans pr-2 leading-tight">
+                                            {f.descricao}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {scoreResult.fatores.length === 0 && (
+                                        <div className="text-emerald-400 font-sans text-xs">
+                                          Condições ideais: nenhuma penalidade aplicada.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <span className="text-zinc-500 font-mono text-xs">—</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Linha 2: Vento com rajada e direção, onda com período */}
+                        <div className="flex items-center justify-between gap-3 text-xs flex-wrap min-w-0 pt-1 border-t border-zinc-800/60">
+                          {/* Vento */}
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <span className="text-zinc-400 font-sans">Vento:</span>
+                            <span className="font-bold text-sky-300 font-mono">{vento} kt</span>
+                            <span className="text-amber-400 font-mono text-[11px]">
+                              (raj. {raj} kt)
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-zinc-300 font-sans text-[11px]">
+                              <Compass
+                                className="w-3 h-3 text-sky-400 shrink-0"
+                                style={{
+                                  transform: `rotate(${item.wind_direction_10m ?? 0}deg)`,
+                                }}
+                              />
+                              {dirLabel}
+                            </span>
+                          </div>
+
+                          {/* Onda */}
+                          <div className="flex items-center gap-1.5 min-w-0" title={tooltipOnda}>
+                            <span className="text-zinc-400 font-sans">Onda:</span>
+                            <span className="font-bold text-cyan-300 font-mono">{onda} m</span>
+                            {isAjustado && (
+                              <span className="text-[10px] text-zinc-500 font-sans">ajust.</span>
+                            )}
+                            <span className="text-zinc-400 font-mono text-[11px]">({per}s)</span>
+                          </div>
+                        </div>
+
+                        {/* Linha 3: Maré, chuva, temperatura em texto secundário */}
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-400 flex-wrap min-w-0 pt-1 border-t border-zinc-800/40">
+                          <div className="flex items-center gap-1">
+                            <span>Maré:</span>
+                            <span className="font-mono text-indigo-300 font-medium">{mare} m</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>Chuva:</span>
+                            <span className="font-mono text-zinc-300">{chuva} mm/h</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>Temp:</span>
+                            <span className="font-mono text-zinc-200 font-semibold">{temp}°C</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Desktop (≥ sm): Tabela horária intacta com overflow-x e colunas sticky */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
@@ -664,7 +874,215 @@ export const PontoDetalhe: React.FC<PontoDetalheProps> = ({
 
             {/* ABA 2: RESUMO 7 DIAS */}
             <TabsContent value="7dias" className="space-y-3 m-0">
-              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
+              {/* Mobile (< sm): Seletor de ordenação e lista vertical de cartões diários */}
+              <div className="sm:hidden space-y-3">
+                <div className="flex items-center justify-between gap-2 bg-[#161c24] border border-zinc-800 rounded-lg p-2 text-xs">
+                  <span className="text-zinc-400 font-medium">Ordenar por:</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSort7diasScore('none')}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        sort7diasScore === 'none'
+                          ? 'bg-cyan-900/80 text-white border border-cyan-700/60'
+                          : 'bg-[#11161d] text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      Padrão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSort7diasScore((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                      }
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                        sort7diasScore !== 'none'
+                          ? 'bg-cyan-900/80 text-white border border-cyan-700/60'
+                          : 'bg-[#11161d] text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      <span>Score</span>
+                      {sort7diasScore === 'desc' && (
+                        <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
+                      )}
+                      {sort7diasScore === 'asc' && (
+                        <ArrowUp className="w-3.5 h-3.5 text-cyan-400" />
+                      )}
+                      {sort7diasScore === 'none' && (
+                        <ArrowUpDown className="w-3 h-3 text-zinc-500" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {sortedDiasResumo.map(({ dia, scoreResult }, idx) => {
+                    const sky = getWeatherCondition(
+                      dia.weatherCode !== null && dia.weatherCode !== undefined
+                        ? dia.weatherCode
+                        : previsao.weather_code,
+                    )
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-3.5 rounded-xl border space-y-2.5 min-w-0 ${
+                          dia.isHoje
+                            ? 'bg-[#142330] border-cyan-800/80'
+                            : 'bg-[#161c24] border-zinc-800'
+                        }`}
+                      >
+                        {/* Linha 1: Dia da semana e data, ícone do céu predominante, badge do score */}
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-4 h-4 text-cyan-400 shrink-0" />
+                            <span
+                              className={`text-sm font-bold tracking-tight font-sans truncate ${
+                                dia.isHoje ? 'text-cyan-300' : 'text-white'
+                              }`}
+                            >
+                              {dia.nomeDia}
+                            </span>
+                            <span className="text-zinc-400 font-mono text-xs shrink-0">
+                              ({dia.dataExibicao})
+                            </span>
+                            <div
+                              className="inline-flex items-center gap-1 min-w-0 cursor-help"
+                              role="img"
+                              aria-label={sky.label}
+                              title={sky.label}
+                            >
+                              <SkyConditionIcon
+                                iconName={sky.iconName}
+                                className="w-5 h-5 shrink-0"
+                              />
+                              <span className={`text-xs truncate ${sky.labelColor}`}>
+                                {sky.label}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {scoreResult.hasData && scoreResult.score !== null ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`inline-flex items-center justify-center min-w-[2.75rem] px-2 py-0.5 rounded-full border font-sans text-xs font-bold tabular-nums cursor-pointer transition-transform hover:scale-105 active:scale-95 ${scoreResult.badgeColor}`}
+                                  >
+                                    <span>{scoreResult.score.toFixed(1)}</span>
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="end"
+                                  className="w-72 p-3 bg-[#11161d] border-zinc-700 text-zinc-100 text-xs shadow-2xl z-50 rounded-xl"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                                      <span className="font-bold text-white flex items-center gap-1.5">
+                                        <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                        Score: {scoreResult.faixa}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] px-1.5 py-0 ${scoreResult.badgeColor}`}
+                                      >
+                                        {scoreResult.score.toFixed(1)} · {scoreResult.faixa}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400 leading-tight">
+                                      Base de 10 pontos com penalidades pelo pior valor do dia:
+                                    </p>
+                                    <div className="space-y-1 pt-1 font-mono text-[11px]">
+                                      {scoreResult.fatores.map((f, fIdx) => (
+                                        <div
+                                          key={fIdx}
+                                          className={`flex items-start justify-between p-1 rounded ${
+                                            f.penalidade < 0 || f.cap !== undefined
+                                              ? 'bg-zinc-800/60 text-zinc-200'
+                                              : 'text-zinc-400'
+                                          }`}
+                                        >
+                                          <span className="font-sans pr-2 leading-tight">
+                                            {f.descricao}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {scoreResult.fatores.length === 0 && (
+                                        <div className="text-emerald-400 font-sans text-xs">
+                                          Condições ideais: nenhuma penalidade aplicada.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <span className="text-zinc-500 font-mono text-xs">—</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Linha 2: temp máx/mín, vento máx, onda máx, chuva total */}
+                        <div className="flex items-center justify-between gap-2 text-xs flex-wrap min-w-0 pt-1 border-t border-zinc-800/60">
+                          {/* Temp máx / mín */}
+                          <div className="flex items-center gap-1 font-mono">
+                            <span className="text-zinc-400 font-sans text-[11px]">Temp:</span>
+                            {dia.temperaturaMax !== null && dia.temperaturaMax !== undefined ? (
+                              <span>
+                                <span className="font-bold text-white">{dia.temperaturaMax}°</span>
+                                <span className="text-zinc-500 mx-0.5">/</span>
+                                <span className="text-zinc-400">
+                                  {dia.temperaturaMin !== null && dia.temperaturaMin !== undefined
+                                    ? `${dia.temperaturaMin}°`
+                                    : '--'}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500">--</span>
+                            )}
+                          </div>
+
+                          {/* Vento Máx */}
+                          <div className="flex items-center gap-1 font-mono">
+                            <span className="text-zinc-400 font-sans text-[11px]">Vento:</span>
+                            <span className="font-bold text-sky-300">
+                              {dia.ventoMax !== null ? `${dia.ventoMax} kt` : '--'}
+                            </span>
+                            {dia.ventoMax !== null && (
+                              <span className="text-zinc-400 text-[10px] font-sans">
+                                (F{dia.ventoMaxBeaufort})
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Onda Máx */}
+                          <div className="flex items-center gap-1 font-mono">
+                            <span className="text-zinc-400 font-sans text-[11px]">Onda:</span>
+                            <span className="font-bold text-cyan-300">
+                              {dia.ondaMax !== null ? `${dia.ondaMax} m` : '--'}
+                            </span>
+                            {dia.ondaMax !== null && (
+                              <span className="text-zinc-400 text-[10px] font-sans">
+                                (G{dia.ondaMaxDouglas})
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Chuva Total */}
+                          <div className="flex items-center gap-1 font-mono">
+                            <span className="text-zinc-400 font-sans text-[11px]">Chuva:</span>
+                            <span className="text-zinc-300 font-medium">{dia.chuvaTotal} mm</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Desktop (≥ sm): Tabela diária intacta com overflow-x e colunas sticky */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-zinc-800 bg-[#161c24]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#0f141c] text-zinc-400 font-semibold border-b border-zinc-800">
                     <tr>
